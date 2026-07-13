@@ -1,0 +1,15 @@
+{
+    "id": "valheim-mod-manager",
+    "name": "Valheim Mod Manager",
+    "author": "chr0mX",
+    "version": "1.0.0",
+    "description": "Browse, install, update and manage BepInEx/Thunderstore Valheim mods directly from the server panel.",
+    "category": "plugin",
+    "namespace": "Chr0mX\\ValheimModManager",
+    "class": "ValheimModManagerPlugin",
+    "panels": [
+        "server"
+    ],
+    "panel_version": null,
+    "composer_packages": null
+}
