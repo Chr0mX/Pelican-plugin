@@ -3,7 +3,6 @@
 namespace Chr0mX\ValheimModManager\Filament\Server\Pages;
 
 use App\Models\Server;
-use App\Traits\Filament\BlockAccessInConflict;
 use BackedEnum;
 use Chr0mX\ValheimModManager\Contracts\GameProviderInterface;
 use Chr0mX\ValheimModManager\DTO\InstalledModData;
@@ -41,7 +40,6 @@ use Illuminate\Support\Str;
 
 class ModsPage extends Page implements HasTable
 {
-    use BlockAccessInConflict;
     use HasTabs;
     use InteractsWithTable;
 
@@ -58,6 +56,10 @@ class ModsPage extends Page implements HasTable
     {
         /** @var Server $server */
         $server = Filament::getTenant();
+
+        if ($server->isInConflictState()) {
+            return false;
+        }
 
         return parent::canAccess() && app(GameProviderRegistry::class)->forServer($server) !== null;
     }
