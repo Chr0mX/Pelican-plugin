@@ -40,9 +40,15 @@ class InstalledMod extends Model
     protected static Server $server;
 
     /**
+     * Named forServer() rather than hydrate() because Eloquent reserves the
+     * static/instance method name "hydrate" for its own internal row-array
+     * to model conversion (Illuminate\Database\Eloquent\Builder::hydrate());
+     * defining our own hydrate() with an incompatible signature shadowed it
+     * and threw a TypeError as soon as Filament's table tried to paginate.
+     *
      * @param  InstalledModData[]  $mods
      */
-    public static function hydrate(Server $server, array $mods): Builder
+    public static function forServer(Server $server, array $mods): Builder
     {
         static::$server = $server;
         static::$data = $mods;
