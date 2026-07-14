@@ -34,7 +34,12 @@ class ThunderstoreService
             // trim every package down to just its latest version here so
             // the cached payload (and every cache hit afterwards) stays
             // small too, instead of re-paying this cost on every read.
-            $previousLimit = ini_get('memory_limit');
+            //
+            // Deliberately not restored afterwards: PHP-FPM resets ini
+            // settings between requests on its own, and ini_set() refuses to
+            // lower memory_limit below the process's current actual usage,
+            // which was throwing here on every single call and defeating
+            // the cache (see SafeCache::remember()'s catch-and-fallback).
             ini_set('memory_limit', '1024M');
 
             try {
@@ -55,8 +60,6 @@ class ThunderstoreService
                 report($exception);
 
                 return [];
-            } finally {
-                ini_set('memory_limit', $previousLimit);
             }
         });
 
