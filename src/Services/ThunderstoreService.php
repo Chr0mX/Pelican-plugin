@@ -4,6 +4,7 @@ namespace Chr0mX\ValheimModManager\Services;
 
 use Chr0mX\ValheimModManager\Contracts\GameProviderInterface;
 use Chr0mX\ValheimModManager\DTO\ThunderstorePackageData;
+use Chr0mX\ValheimModManager\Support\SafeCache;
 use Exception;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Http;
@@ -22,7 +23,7 @@ class ThunderstoreService
     {
         $cacheKey = "valheim-mod-manager:packages:{$provider->getThunderstoreCommunity()}";
 
-        $packages = cache()->remember($cacheKey, now()->addMinutes(30), function () use ($provider) {
+        $packages = SafeCache::remember($cacheKey, now()->addMinutes(30), function () use ($provider) {
             try {
                 $baseUrl = rtrim(config('valheim-mod-manager.thunderstore_api_url'), '/');
                 $community = $provider->getThunderstoreCommunity();

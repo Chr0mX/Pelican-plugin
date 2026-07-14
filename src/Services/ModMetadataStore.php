@@ -5,9 +5,9 @@ namespace Chr0mX\ValheimModManager\Services;
 use App\Models\Server;
 use App\Repositories\Daemon\DaemonFileRepository;
 use Chr0mX\ValheimModManager\Contracts\GameProviderInterface;
+use Chr0mX\ValheimModManager\Support\SafeCache;
 use Chr0mX\ValheimModManager\Support\SafePath;
 use Exception;
-use Illuminate\Support\Facades\Cache;
 
 /**
  * Persists the list of packages this plugin installed for a server as a
@@ -127,7 +127,7 @@ class ModMetadataStore
     protected function mutate(Server $server, GameProviderInterface $provider, callable $callback): bool
     {
         try {
-            return Cache::lock("valheim-mod-manager:metadata:{$server->id}", 10)->block(5, function () use ($server, $provider, $callback) {
+            return SafeCache::lock("valheim-mod-manager:metadata:{$server->id}", 10, 5, function () use ($server, $provider, $callback) {
                 $mods = $callback($this->all($server, $provider));
 
                 $response = $this->fileRepository->setServer($server)->putContent(
