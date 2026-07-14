@@ -38,6 +38,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Str;
 
 class ModsPage extends Page implements HasTable
@@ -325,33 +326,40 @@ class ModsPage extends Page implements HasTable
         $installed = $this->installedMods();
 
         return $table
-            ->records(fn (?string $search, int $page) => ValheimModManager::browse($provider, $search, $page))
+            ->records(function (?string $search, int $page) use ($provider) {
+                $result = ValheimModManager::browse($provider, $search, $page);
+
+                return new LengthAwarePaginator(
+                    array_map(static fn (ThunderstorePackageData $package): array => $package->toTableRow(), $result->items()),
+                    $result->total(),
+                    $result->perPage(),
+                    $result->currentPage(),
+                );
+            })
             ->paginated([20])
             ->columns([
                 ImageColumn::make('icon')
-                    ->label('')
-                    ->state(fn (ThunderstorePackageData $record) => $record->icon()),
+                    ->label(''),
                 TextColumn::make('name')
                     ->searchable()
-                    ->description(fn (ThunderstorePackageData $record) => Str::limit($record->description(), 120)),
+                    ->description(fn (array $record): string => Str::limit($record['description'], 120)),
                 TextColumn::make('owner')
                     ->label(trans('valheim-mod-manager::strings.table.columns.author'))
-                    ->url(fn (ThunderstorePackageData $record) => "https://thunderstore.io/package/{$record->owner}/", true),
+                    ->url(fn (array $record): string => "https://thunderstore.io/package/{$record['owner']}/", true),
                 TextColumn::make('downloads')
                     ->label(trans('valheim-mod-manager::strings.table.columns.downloads'))
-                    ->state(fn (ThunderstorePackageData $record) => $record->latestVersion()?->downloads ?? 0)
                     ->icon('heroicon-o-arrow-down-tray')
                     ->numeric(),
                 TextColumn::make('latest_version')
                     ->label(trans('valheim-mod-manager::strings.table.columns.latest_version'))
-                    ->state(fn (ThunderstorePackageData $record) => $record->latestVersion()?->versionNumber ?? '—'),
+                    ->placeholder('—'),
             ])
-            ->recordUrl(fn (ThunderstorePackageData $record) => $record->packageUrl, true)
+            ->recordUrl(fn (array $record): string => $record['package_url'], true)
             ->recordActions([
                 Action::make('install')
-                    ->label(fn (ThunderstorePackageData $record) => $this->installButtonLabel($record, $installed))
+                    ->label(fn (array $record): string => $this->installButtonLabel($record, $installed))
                     ->icon('heroicon-o-arrow-down-tray')
-                    ->disabled(fn (ThunderstorePackageData $record) => $this->isFullyUpToDate($record, $installed))
+                    ->disabled(fn (array $record): bool => $this->isFullyUpToDate($record, $installed))
                     ->requiresConfirmation()
                     ->schema([
                         Toggle::make('overwrite_config')
@@ -359,14 +367,15 @@ class ModsPage extends Page implements HasTable
                             ->helperText(trans('valheim-mod-manager::strings.modals.overwrite_config_helper'))
                             ->default(false),
                     ])
-                    ->action(fn (ThunderstorePackageData $record, array $data) => $this->installLatest($record, (bool) ($data['overwrite_config'] ?? false))),
+                    ->action(fn (array $record, array $data) => $this->installLatest($record, (bool) ($data['overwrite_config'] ?? false))),
             ]);
     }
 
     /**
+     * @param  array{owner: string, name: string, latest_version: string}  $record
      * @param  array<string, InstalledModData>  $installed
      */
-    protected function installButtonLabel(ThunderstorePackageData $record, array $installed): string
+    protected function installButtonLabel(array $record, array $installed): string
     {
         return $this->isFullyUpToDate($record, $installed)
             ? trans('valheim-mod-manager::strings.status.installed')
@@ -374,14 +383,15 @@ class ModsPage extends Page implements HasTable
     }
 
     /**
+     * @param  array{owner: string, name: string, latest_version: string}  $record
      * @param  array<string, InstalledModData>  $installed
      */
-    protected function isFullyUpToDate(ThunderstorePackageData $record, array $installed): bool
+    protected function isFullyUpToDate(array $record, array $installed): bool
     {
-        $key = ModMetadataStore::key($record->owner, $record->name);
+        $key = ModMetadataStore::key($record['owner'], $record['name']);
         $existing = $installed[$key] ?? null;
 
-        return $existing !== null && $existing->version === $record->latestVersion()?->versionNumber;
+        return $existing !== null && $existing->version === $record['latest_version'];
     }
 
     protected function activityTable(Table $table): Table
@@ -495,12 +505,21 @@ class ModsPage extends Page implements HasTable
             ->send();
     }
 
-    protected function installLatest(ThunderstorePackageData $package, bool $overwriteConfig): void
+    /**
+     * @param  array{owner: string, name: string}  $record
+     */
+    protected function installLatest(array $record, bool $overwriteConfig): void
     {
         $provider = $this->provider();
-        $latestVersion = $package->latestVersion();
+        $package = ValheimModManager::findPackage($provider, $record['owner'], $record['name']);
+        $latestVersion = $package?->latestVersion();
 
-        if ($latestVersion === null) {
+        if ($package === null || $latestVersion === null) {
+            Notification::make()
+                ->title(trans('valheim-mod-manager::strings.notifications.install_failed'))
+                ->danger()
+                ->send();
+
             return;
         }
 

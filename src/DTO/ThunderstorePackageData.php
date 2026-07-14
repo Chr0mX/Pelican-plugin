@@ -69,4 +69,27 @@ final readonly class ThunderstorePackageData
     {
         return $this->latestVersion?->description ?? '';
     }
+
+    /**
+     * Filament's non-Eloquent table records must be plain arrays or Eloquent
+     * models - an arbitrary object (even a readonly DTO) fails internal
+     * Filament type checks. This is the row shape the Browse Thunderstore
+     * table renders; `findPackage()` is used to get back to the real DTO
+     * when an action needs to act on it.
+     *
+     * @return array{key: string, name: string, owner: string, package_url: string, icon: ?string, description: string, downloads: int, latest_version: ?string}
+     */
+    public function toTableRow(): array
+    {
+        return [
+            'key' => strtolower("{$this->owner}-{$this->name}"),
+            'name' => $this->name,
+            'owner' => $this->owner,
+            'package_url' => $this->packageUrl,
+            'icon' => $this->icon(),
+            'description' => $this->description(),
+            'downloads' => $this->latestVersion?->downloads ?? 0,
+            'latest_version' => $this->latestVersion?->versionNumber,
+        ];
+    }
 }
