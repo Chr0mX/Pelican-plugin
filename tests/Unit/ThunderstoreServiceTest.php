@@ -6,6 +6,7 @@ use Chr0mX\ValheimModManager\Contracts\GameProviderInterface;
 use Chr0mX\ValheimModManager\Games\ValheimProvider;
 use Chr0mX\ValheimModManager\Services\ThunderstoreService;
 use Chr0mX\ValheimModManager\Tests\TestCase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class ThunderstoreServiceTest extends TestCase
@@ -111,6 +112,40 @@ class ThunderstoreServiceTest extends TestCase
 
         $this->assertNotNull($service->findPackage($this->provider(), 'valheimmodding', 'JOTUNN'));
         $this->assertNull($service->findPackage($this->provider(), 'nope', 'nope'));
+    }
+
+    public function test_repeated_find_package_calls_within_one_request_hit_the_cache_store_once(): void
+    {
+        // ModManagerService::installedMods() calls findPackage() once per
+        // installed mod to resolve each one's "latest version". On a real
+        // cache store (file/redis), every Cache::remember() call re-reads
+        // and unserializes the whole cached package list even on a hit -
+        // Http::assertSentCount() alone wouldn't catch that cost being paid
+        // once per mod instead of once per page load, since the array cache
+        // driver used in tests only avoids re-running the callback, not
+        // re-hitting the store. Asserting Cache::remember() itself is only
+        // invoked once proves the in-memory memo is actually short-circuiting
+        // repeat calls, not just relying on the callback being skipped.
+        Http::fake([
+            'thunderstore.io/c/valheim/api/v1/package/' => Http::response([
+                $this->fakePackage('Jotunn', 'ValheimModding', 500),
+                $this->fakePackage('PlantEverything', 'Advize', 300),
+            ]),
+        ]);
+
+        Cache::shouldReceive('remember')
+            ->once()
+            ->andReturnUsing(fn (string $key, $ttl, callable $callback) => $callback());
+
+        $service = new ThunderstoreService();
+        $provider = $this->provider();
+
+        $service->findPackage($provider, 'ValheimModding', 'Jotunn');
+        $service->findPackage($provider, 'Advize', 'PlantEverything');
+        $service->findPackage($provider, 'Nobody', 'Nothing');
+        $service->getAllPackages($provider);
+
+        Http::assertSentCount(1);
     }
 
     public function test_gracefully_returns_empty_list_on_http_failure(): void

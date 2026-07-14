@@ -17,11 +17,31 @@ use Illuminate\Support\Facades\Http;
 class ThunderstoreService
 {
     /**
+     * Per-instance memo of the (already cache-store-backed) package list, so
+     * that within a single request, calling findPackage()/findPackageByFullName()
+     * once per installed mod - as ModManagerService::installedMods() does to
+     * resolve "latest version" for each row - hits the cache store once
+     * instead of once per mod. This service is resolved once per request
+     * (ModManagerService is reused via the ValheimModManager facade's static
+     * resolved-instance cache), so this memo lives exactly as long as it
+     * should.
+     *
+     * @var array<string, ThunderstorePackageData[]>
+     */
+    protected array $packagesMemo = [];
+
+    /**
      * @return ThunderstorePackageData[]
      */
     public function getAllPackages(GameProviderInterface $provider): array
     {
-        $cacheKey = "valheim-mod-manager:packages:{$provider->getThunderstoreCommunity()}";
+        $community = $provider->getThunderstoreCommunity();
+
+        if (isset($this->packagesMemo[$community])) {
+            return $this->packagesMemo[$community];
+        }
+
+        $cacheKey = "valheim-mod-manager:packages:{$community}";
 
         $packages = SafeCache::remember($cacheKey, now()->addMinutes(30), function () use ($provider) {
             // A community's full package list includes every historical
@@ -63,7 +83,7 @@ class ThunderstoreService
             }
         });
 
-        return $packages;
+        return $this->packagesMemo[$community] = $packages;
     }
 
     /**
