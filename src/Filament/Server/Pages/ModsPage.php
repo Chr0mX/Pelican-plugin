@@ -29,7 +29,9 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Resources\Concerns\HasTabs;
+use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
@@ -87,6 +89,14 @@ class ModsPage extends Page implements HasTable
             'browse' => Tab::make(trans('valheim-mod-manager::strings.tabs.browse')),
             'activity' => Tab::make(trans('valheim-mod-manager::strings.tabs.activity')),
         ];
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            $this->getTabsContentComponent(),
+            EmbeddedTable::make(),
+        ]);
     }
 
     protected function server(): Server
