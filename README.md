@@ -26,6 +26,28 @@ directly from a server's client area in [Pelican Panel](https://pelican.dev) - n
 3. Tag the Valheim egg you want to manage mods on with `bepinex-mods` (Admin -> Eggs -> select egg -> Tags).
 4. Open any server using that egg - a new **Mods** item appears in the server sidebar.
 
+Alternatively, from the admin plugin list you can use **Import from URL** with a link to a tagged release's
+`valheim-mod-manager.zip` asset (e.g. `https://github.com/Chr0mX/Pelican-plugin/releases/download/<tag>/valheim-mod-manager.zip`),
+or **Import from File** with that zip downloaded locally.
+
+> The asset must be named exactly `valheim-mod-manager.zip` - Pelican derives the plugin id from the URL/filename
+> (the segment before `.zip`) and it must match the `id` in `plugin.json`.
+
+### Auto-updates
+
+`plugin.json` sets `update_url` to `update.json` in this repo (served raw from GitHub), so once a version
+including that field is installed, the panel's plugin list will detect newer releases automatically and offer an
+in-place update - no manual re-import needed from that point on.
+
+### Releasing a new version
+
+1. Bump `version` in `plugin.json`.
+2. Update `update.json`'s `version` and `download_url` to match the new tag.
+3. Build a zip whose root contains `plugin.json` directly (no wrapping folder) - `config/`, `lang/`, `database/`,
+   `src/`, `README.md`, `LICENSE`, but not `composer.json/.lock`, `phpunit.xml`, `tests/` or `vendor/`.
+4. Publish a GitHub Release tagged with the same version, with that zip attached and named exactly
+   `valheim-mod-manager.zip`.
+
 ## Features
 
 - **Sidebar page** ("Mods") added to the Server panel, only visible for servers whose egg is tagged `bepinex-mods`.
