@@ -184,7 +184,7 @@ class ModsPage extends Page implements HasTable
         $mods = $this->installedMods();
 
         return $table
-            ->query(InstalledMod::hydrate($this->server(), array_values($mods)))
+            ->query(InstalledMod::forServer($this->server(), array_values($mods)))
             ->defaultSort('name')
             ->searchable()
             ->columns([
