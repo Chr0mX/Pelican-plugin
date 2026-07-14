@@ -43,7 +43,7 @@ class ThunderstoreDataTest extends TestCase
         ];
     }
 
-    public function test_sorts_versions_newest_first_regardless_of_input_order(): void
+    public function test_only_keeps_the_latest_version_regardless_of_input_order(): void
     {
         $package = ThunderstorePackageData::fromArray($this->samplePackage());
 
@@ -51,15 +51,16 @@ class ThunderstoreDataTest extends TestCase
         $this->assertSame('newest', $package->description());
     }
 
-    public function test_finds_a_specific_version(): void
+    public function test_a_package_with_no_versions_has_no_latest_version(): void
     {
-        $package = ThunderstorePackageData::fromArray($this->samplePackage());
+        $data = $this->samplePackage();
+        $data['versions'] = [];
 
-        $version = $package->findVersion('5.4.2201');
+        $package = ThunderstorePackageData::fromArray($data);
 
-        $this->assertNotNull($version);
-        $this->assertSame('older', $version->description);
-        $this->assertNull($package->findVersion('9.9.9'));
+        $this->assertNull($package->latestVersion());
+        $this->assertSame('', $package->description());
+        $this->assertNull($package->icon());
     }
 
     public function test_parses_dependencies_on_versions(): void

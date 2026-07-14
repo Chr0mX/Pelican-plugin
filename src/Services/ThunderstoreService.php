@@ -24,6 +24,19 @@ class ThunderstoreService
         $cacheKey = "valheim-mod-manager:packages:{$provider->getThunderstoreCommunity()}";
 
         $packages = SafeCache::remember($cacheKey, now()->addMinutes(30), function () use ($provider) {
+            // A community's full package list includes every historical
+            // version (with full description/changelog text) of every
+            // package - for a large community that JSON payload is large
+            // enough to exhaust a typical PHP memory_limit before we ever
+            // get a chance to discard the versions we don't need. Give this
+            // one fetch+decode+trim extra headroom rather than requiring
+            // the whole panel to run with a bigger global memory_limit, and
+            // trim every package down to just its latest version here so
+            // the cached payload (and every cache hit afterwards) stays
+            // small too, instead of re-paying this cost on every read.
+            $previousLimit = ini_get('memory_limit');
+            ini_set('memory_limit', '1024M');
+
             try {
                 $baseUrl = rtrim(config('valheim-mod-manager.thunderstore_api_url'), '/');
                 $community = $provider->getThunderstoreCommunity();
@@ -35,15 +48,19 @@ class ThunderstoreService
                     ->get("$baseUrl/c/$community/api/v1/package/")
                     ->json();
 
-                return is_array($response) ? $response : [];
+                $response = is_array($response) ? $response : [];
+
+                return array_map(static fn (array $package): ThunderstorePackageData => ThunderstorePackageData::fromArray($package), $response);
             } catch (Exception $exception) {
                 report($exception);
 
                 return [];
+            } finally {
+                ini_set('memory_limit', $previousLimit);
             }
         });
 
-        return array_map(static fn (array $package): ThunderstorePackageData => ThunderstorePackageData::fromArray($package), $packages);
+        return $packages;
     }
 
     /**
