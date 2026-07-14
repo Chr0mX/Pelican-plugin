@@ -75,4 +75,39 @@ class ThunderstoreDataTest extends TestCase
         $this->assertCount(1, $dependencies);
         $this->assertSame('ValheimModding', $dependencies[0]->namespace);
     }
+
+    /**
+     * Filament's non-Eloquent table records must be plain arrays or Eloquent
+     * models - passing an object (even this readonly DTO) through
+     * ->records() throws a TypeError deep inside Filament's table
+     * internals. toTableRow() is the array shape actually handed to the
+     * Browse Thunderstore table.
+     */
+    public function test_to_table_row_is_a_plain_array_with_the_expected_shape(): void
+    {
+        $package = ThunderstorePackageData::fromArray($this->samplePackage());
+
+        $row = $package->toTableRow();
+
+        $this->assertIsArray($row);
+        $this->assertSame('denikson-bepinexpack_valheim', $row['key']);
+        $this->assertSame('BepInExPack_Valheim', $row['name']);
+        $this->assertSame('denikson', $row['owner']);
+        $this->assertSame('https://thunderstore.io/package/denikson/BepInExPack_Valheim/', $row['package_url']);
+        $this->assertSame('newest', $row['description']);
+        $this->assertSame(200, $row['downloads']);
+        $this->assertSame('5.4.2202', $row['latest_version']);
+    }
+
+    public function test_to_table_row_uses_null_latest_version_when_no_versions_exist(): void
+    {
+        $data = $this->samplePackage();
+        $data['versions'] = [];
+
+        $row = ThunderstorePackageData::fromArray($data)->toTableRow();
+
+        $this->assertNull($row['latest_version']);
+        $this->assertNull($row['icon']);
+        $this->assertSame(0, $row['downloads']);
+    }
 }
