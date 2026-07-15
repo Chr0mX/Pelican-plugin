@@ -62,7 +62,11 @@ in-place update - no manual re-import needed from that point on.
   **Update All** and a table bulk action **Update Selected**.
 - **Safe installs/updates** - packages are downloaded and extracted into an isolated staging directory first,
   verified, and only then moved into the live plugins directory. `BepInEx/config` is never touched unless you tick
-  "Overwrite existing config files" on the install/update confirmation.
+  "Overwrite existing config files" on the install/update confirmation. `manifest.json`/`icon.png` are kept
+  alongside the installed files (matching how r2modman/Thunderstore Mod Manager lay out a profile), so a mod's
+  real description and icon are always readable straight from disk - no live Thunderstore lookup required. Mods
+  installed before this was the behavior get a one-time `manifest.json` backfilled automatically the next time
+  they're scanned.
 - **Uninstall** - removes only the files this plugin recorded for that package; everything else on disk is left
   alone. Confirmation required, also available as a bulk action.
 - **Enable/disable** - standalone `.dll` files are renamed to `*.dll.disabled`; folder-based packages are moved into

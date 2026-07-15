@@ -25,7 +25,15 @@ use RuntimeException;
  */
 class ModInstaller
 {
-    private const METADATA_FILES = ['manifest.json', 'icon.png', 'readme.md', 'changelog.md', 'changelog.txt', 'license'];
+    // manifest.json/icon.png are deliberately *kept* alongside the installed
+    // files (matching how r2modman/Thunderstore Mod Manager lay out a
+    // profile) so ModScanner can read a managed mod's real description/icon
+    // straight from disk, the same way it already does for unmanaged
+    // folders - no live Thunderstore lookup required. README/changelog/
+    // license aren't read by anything, so there's no reason to keep them.
+    private const METADATA_FILES = ['readme.md', 'changelog.md', 'changelog.txt', 'license'];
+
+    private const ZIP_NAME = 'package.zip';
 
     public function __construct(
         protected DaemonFileRepository $fileRepository,
@@ -51,17 +59,16 @@ class ModInstaller
 
         try {
             $this->progress($progressToken, 'downloading');
-            $zipName = 'package.zip';
             $this->fileRepository->pull($version->downloadUrl, $stagingDir, [
-                'filename' => $zipName,
+                'filename' => self::ZIP_NAME,
                 'foreground' => true,
             ])->throw();
 
             $this->progress($progressToken, 'verifying');
-            $this->verifyDownload($stagingDir, $zipName);
+            $this->verifyDownload($stagingDir, self::ZIP_NAME);
 
             $this->progress($progressToken, 'extracting');
-            $this->fileRepository->decompressFile($stagingDir, $zipName)->throw();
+            $this->fileRepository->decompressFile($stagingDir, self::ZIP_NAME)->throw();
 
             // For an update, the new payload usually resolves to the exact same
             // wrapper folder/file names as the old one (same namespace + name).
@@ -154,7 +161,14 @@ class ModInstaller
         }
 
         // Flat package: wrap every non-metadata entry in a single folder named after the package.
-        $payload = array_values(array_filter($entryNames, fn (string $name): bool => !in_array(strtolower($name), self::METADATA_FILES, true)));
+        // The downloaded zip itself is extracted in place alongside its own contents, so it must
+        // be excluded here too - otherwise package.zip ends up moved into the live plugins folder
+        // right next to the mod it belongs to.
+        $payload = array_values(array_filter(
+            $entryNames,
+            fn (string $name): bool => !in_array(strtolower($name), self::METADATA_FILES, true)
+                && strcasecmp($name, self::ZIP_NAME) !== 0
+        ));
 
         if (empty($payload)) {
             return ['directory' => $provider->getPluginsDirectories()[0], 'files' => []];

@@ -71,21 +71,57 @@ class ModScannerTest extends TestCase
         $this->assertSame('DisabledLoose.dll', $disabledDll->name);
     }
 
-    public function test_scan_reads_icon_png_for_unmanaged_folders_but_never_for_managed_mods(): void
+    public function test_scan_reads_manifest_and_icon_for_managed_mods_when_present(): void
     {
         $repository = new DaemonFileRepository();
         $server = new Server();
         $provider = new ValheimProvider();
         $metadataStore = new ModMetadataStore($repository);
 
-        // A managed package - ModInstaller never leaves an icon.png behind
-        // for anything it installs, so even if one somehow ended up in a
-        // managed mod's folder, the scanner should never expose it (no
-        // point spending a daemon round trip that can never succeed).
-        $metadataStore->put($server, $provider, 'ValheimModding', 'Jotunn', '2.17.0', 'BepInEx/plugins', ['Jotunn'], []);
-        $repository->seedDirectory('BepInEx/plugins/Jotunn');
-        $repository->seedFile('BepInEx/plugins/Jotunn/Jotunn.dll', 'binary');
-        $repository->seedFile('BepInEx/plugins/Jotunn/icon.png', 'fake-png-bytes');
+        // A managed mod installed after ModInstaller started keeping
+        // manifest.json/icon.png alongside the files it installs - the
+        // scanner should read description/icon straight from disk, the
+        // same way it already does for unmanaged folders.
+        $metadataStore->put($server, $provider, 'ValheimModding', 'Jotunn', '2.17.0', 'BepInEx/plugins', ['ValheimModding-Jotunn'], []);
+        $repository->seedDirectory('BepInEx/plugins/ValheimModding-Jotunn');
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll', 'binary');
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/manifest.json', json_encode([
+            'name' => 'Jotunn',
+            'version_number' => '2.17.0',
+            'description' => 'A modding library',
+            'dependencies' => [],
+        ]));
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/icon.png', 'fake-png-bytes');
+
+        // A managed mod installed *before* that change (or whose
+        // manifest.json write failed) - only the ledger's own fields are
+        // available; this must degrade gracefully, not error.
+        $metadataStore->put($server, $provider, 'Legacy', 'Old', '1.0.0', 'BepInEx/plugins', ['Legacy-Old'], []);
+        $repository->seedDirectory('BepInEx/plugins/Legacy-Old');
+        $repository->seedFile('BepInEx/plugins/Legacy-Old/Old.dll', 'binary');
+
+        $repository->seedDirectory('BepInEx/patchers');
+
+        $scanner = new ModScanner($repository, $metadataStore);
+        $results = collect($scanner->scan($server, $provider))->keyBy('key');
+
+        $jotunn = $results->get('valheimmodding-jotunn');
+        $this->assertTrue($jotunn->hasManifestOnDisk);
+        $this->assertSame('A modding library', $jotunn->description);
+        $this->assertSame('data:image/png;base64,' . base64_encode('fake-png-bytes'), $jotunn->icon);
+
+        $legacy = $results->get('legacy-old');
+        $this->assertFalse($legacy->hasManifestOnDisk);
+        $this->assertSame('', $legacy->description);
+        $this->assertNull($legacy->icon);
+    }
+
+    public function test_scan_reads_icon_png_for_unmanaged_folders(): void
+    {
+        $repository = new DaemonFileRepository();
+        $server = new Server();
+        $provider = new ValheimProvider();
+        $metadataStore = new ModMetadataStore($repository);
 
         // An unmanaged folder (e.g. dropped in by the egg's install script)
         // that kept its manifest.json *and* icon.png intact.
@@ -109,9 +145,6 @@ class ModScannerTest extends TestCase
 
         $scanner = new ModScanner($repository, $metadataStore);
         $results = collect($scanner->scan($server, $provider))->keyBy('key');
-
-        $jotunn = $results->get('valheimmodding-jotunn');
-        $this->assertNull($jotunn->icon, 'Managed mods should never expose an icon, even if one happens to exist on disk.');
 
         $withIcon = $results->get('folder:bepinex/plugins/withicon');
         $this->assertSame('data:image/png;base64,' . base64_encode('fake-png-bytes'), $withIcon->icon);
