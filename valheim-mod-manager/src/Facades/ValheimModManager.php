@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Facade;
 /**
  * @method static ?GameProviderInterface providerForServer(Server $server)
  * @method static InstalledModData[] installedMods(Server $server, GameProviderInterface $provider, bool $withLatestVersions = true)
+ * @method static void forgetInstalledModsCache(Server $server, GameProviderInterface $provider)
  * @method static ?string latestVersionFor(GameProviderInterface $provider, string $namespace, string $name)
  * @method static LengthAwarePaginator browse(GameProviderInterface $provider, ?string $search, int $page = 1, int $perPage = 20)
  * @method static ?ThunderstorePackageData findPackage(GameProviderInterface $provider, string $namespace, string $name)

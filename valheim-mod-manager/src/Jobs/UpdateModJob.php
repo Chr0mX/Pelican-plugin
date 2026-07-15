@@ -7,6 +7,7 @@ use App\Models\User;
 use Chr0mX\ValheimModManager\Contracts\GameProviderInterface;
 use Chr0mX\ValheimModManager\DTO\ThunderstorePackageData;
 use Chr0mX\ValheimModManager\DTO\ThunderstoreVersionData;
+use Chr0mX\ValheimModManager\Facades\ValheimModManager;
 use Chr0mX\ValheimModManager\Services\ModInstaller;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Queueable;
@@ -75,6 +76,13 @@ class UpdateModJob implements ShouldQueue
                 $exception->getMessage(),
                 'danger',
             );
+        } finally {
+            // Runs on a queue worker, possibly well after the request that
+            // dispatched this job returned, so the page's own cache-forget
+            // calls (made at dispatch time, before this ran) can't have
+            // covered this - without this, the Installed tab could keep
+            // serving a pre-update cached scan for up to 15 seconds.
+            ValheimModManager::forgetInstalledModsCache($this->server, $this->provider);
         }
     }
 

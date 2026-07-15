@@ -141,6 +141,7 @@ class ModsPage extends Page implements HasTable
                 ->color('gray')
                 ->action(function () {
                     $this->installedModsCache = null;
+                    ValheimModManager::forgetInstalledModsCache($this->server(), $this->provider());
                     $this->resetTable();
 
                     Notification::make()
@@ -189,6 +190,8 @@ class ModsPage extends Page implements HasTable
             ->defaultSort('name')
             ->searchable()
             ->columns([
+                ImageColumn::make('icon')
+                    ->label(''),
                 TextColumn::make('name')
                     ->label(trans('valheim-mod-manager::strings.table.columns.name'))
                     ->searchable()
@@ -439,6 +442,7 @@ class ModsPage extends Page implements HasTable
         }
 
         $this->installedModsCache = null;
+        ValheimModManager::forgetInstalledModsCache($this->server(), $this->provider());
         $this->resetTable();
     }
 
@@ -463,6 +467,7 @@ class ModsPage extends Page implements HasTable
         }
 
         $this->installedModsCache = null;
+        ValheimModManager::forgetInstalledModsCache($this->server(), $this->provider());
         $this->resetTable();
     }
 
@@ -620,6 +625,7 @@ class ModsPage extends Page implements HasTable
         }
 
         $this->installedModsCache = null;
+        ValheimModManager::forgetInstalledModsCache($server, $provider);
         $this->resetTable();
     }
 }

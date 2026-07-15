@@ -231,7 +231,33 @@ class ModScanner
             status: $disabled ? ModStatus::Disabled : ModStatus::Unknown,
             lastUpdated: null,
             managed: false,
+            icon: $this->readIcon($directory, $name),
         );
+    }
+
+    /**
+     * Only ever attempted for folder-based, unmanaged entries: this
+     * plugin's own ModInstaller deliberately strips icon.png (and every
+     * other metadata file) out of anything it installs itself, so a
+     * managed mod would never have one to find - not worth a guaranteed-
+     * to-fail daemon round trip on every scan. Folders it didn't install
+     * (dropped in manually, or by the egg's own install script) may still
+     * have the icon.png Thunderstore ships inside the package zip.
+     */
+    protected function readIcon(string $directory, string $name): ?string
+    {
+        try {
+            $iconPath = SafePath::join($directory, $name, 'icon.png');
+            $content = $this->fileRepository->getContent($iconPath);
+
+            if ($content === '') {
+                return null;
+            }
+
+            return 'data:image/png;base64,' . base64_encode($content);
+        } catch (Exception) {
+            return null;
+        }
     }
 
     /**
