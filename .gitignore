@@ -1,6 +1,6 @@
-/vendor
-/.phpunit.cache
-.phpunit.result.cache
+/valheim-mod-manager/vendor
+/valheim-mod-manager/.phpunit.cache
+/valheim-mod-manager/.phpunit.result.cache
 /.idea
 /.vscode
 .DS_Store
