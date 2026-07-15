@@ -14,7 +14,8 @@ directly from a server's client area in [Pelican Panel](https://pelican.dev) - n
 
 ## Installation
 
-1. Copy (or clone) this repository into your panel's `plugins` directory, renamed to match the plugin id:
+1. Copy (or clone) this `valheim-mod-manager/` folder - not the whole `Pelican-plugin` repo - into your panel's
+   `plugins` directory:
    ```
    /var/www/pelican/plugins/valheim-mod-manager
    ```
@@ -35,7 +36,7 @@ or **Import from File** with that zip downloaded locally.
 
 ### Auto-updates
 
-`plugin.json` sets `update_url` to `update.json` in this repo (served raw from GitHub), so once a version
+`plugin.json` sets `update_url` to this folder's `update.json` (served raw from GitHub), so once a version
 including that field is installed, the panel's plugin list will detect newer releases automatically and offer an
 in-place update - no manual re-import needed from that point on.
 
@@ -43,8 +44,9 @@ in-place update - no manual re-import needed from that point on.
 
 1. Bump `version` in `plugin.json`.
 2. Update `update.json`'s `version` and `download_url` to match the new tag.
-3. Build a zip whose root contains `plugin.json` directly (no wrapping folder) - `config/`, `lang/`, `database/`,
-   `src/`, `README.md`, `LICENSE`, but not `composer.json/.lock`, `phpunit.xml`, `tests/` or `vendor/`.
+3. From inside this `valheim-mod-manager/` folder, build a zip whose root contains `plugin.json` directly (no
+   wrapping folder) - `config/`, `lang/`, `database/`, `src/`, `README.md`, `LICENSE`, but not
+   `composer.json/.lock`, `phpunit.xml`, `tests/` or `vendor/`.
 4. Publish a GitHub Release tagged with the same version, with that zip attached and named exactly
    `valheim-mod-manager.zip`.
 
