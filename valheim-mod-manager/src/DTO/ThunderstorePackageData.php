@@ -77,7 +77,7 @@ final readonly class ThunderstorePackageData
      * table renders; `findPackage()` is used to get back to the real DTO
      * when an action needs to act on it.
      *
-     * @return array{key: string, name: string, owner: string, package_url: string, icon: ?string, description: string, downloads: int, latest_version: ?string}
+     * @return array{key: string, name: string, owner: string, package_url: string, icon: ?string, description: string, downloads: int, latest_version: ?string, last_updated: ?string}
      */
     public function toTableRow(): array
     {
@@ -90,6 +90,7 @@ final readonly class ThunderstorePackageData
             'description' => $this->description(),
             'downloads' => $this->latestVersion?->downloads ?? 0,
             'latest_version' => $this->latestVersion?->versionNumber,
+            'last_updated' => $this->latestVersion?->dateCreated,
         ];
     }
 }
