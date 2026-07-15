@@ -2,7 +2,15 @@
 
 All notable changes to the Valheim Mod Manager plugin are documented in this file.
 
-## [1.0.14] - Unreleased
+## [1.0.15] - Unreleased
+
+### Fixed
+- **Residual `package.zip` from before 1.0.14 never got cleaned up.** 1.0.14 stopped *new* installs/updates from
+  leaving a stray `package.zip` behind, but did nothing for mods that already had one from before that fix.
+  `ModScanner` now deletes any residual `package.zip` it finds in a managed mod's folder during a scan - a
+  one-time, self-healing cleanup, same as the `manifest.json` backfill.
+
+## [1.0.14] - 2026-07-15
 
 ### Fixed
 - **Residual `package.zip` left behind after install/update.** The flat-package install path's metadata-file
@@ -123,7 +131,8 @@ Version bump only, published to keep the release history moving forward after 1.
   `BepInEx/config`, safe uninstall, enable/disable, activity log, plugin settings page, and background install/
   update jobs.
 
-[1.0.14]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.13...HEAD
+[1.0.15]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.14...HEAD
+[1.0.14]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.13...1.0.14
 [1.0.13]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.12...1.0.13
 [1.0.12]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.11...1.0.12
 [1.0.11]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.10...1.0.11

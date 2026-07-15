@@ -2,7 +2,7 @@
     "id": "valheim-mod-manager",
     "name": "Valheim Mod Manager",
     "author": "chr0mX",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "description": "Browse, install, update and manage BepInEx/Thunderstore Valheim mods directly from the server panel.",
     "category": "plugin",
     "url": "https://github.com/Chr0mX/Pelican-plugin",

@@ -116,6 +116,36 @@ class ModScannerTest extends TestCase
         $this->assertNull($legacy->icon);
     }
 
+    public function test_scan_cleans_up_a_residual_package_zip_from_before_it_was_excluded(): void
+    {
+        $repository = new DaemonFileRepository();
+        $server = new Server();
+        $provider = new ValheimProvider();
+        $metadataStore = new ModMetadataStore($repository);
+
+        // Simulates a mod installed before ModInstaller excluded its own
+        // downloaded zip from the payload - package.zip ended up sitting in
+        // the live mod folder right alongside the actual files.
+        $metadataStore->put($server, $provider, 'ValheimModding', 'Jotunn', '2.17.0', 'BepInEx/plugins', ['ValheimModding-Jotunn'], []);
+        $repository->seedDirectory('BepInEx/plugins/ValheimModding-Jotunn');
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll', 'binary');
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/package.zip', 'stale-zip-bytes');
+
+        $repository->seedDirectory('BepInEx/patchers');
+
+        $this->assertTrue($repository->fileExists('BepInEx/plugins/ValheimModding-Jotunn/package.zip'));
+
+        $scanner = new ModScanner($repository, $metadataStore);
+        $scanner->scan($server, $provider);
+
+        $this->assertFalse(
+            $repository->fileExists('BepInEx/plugins/ValheimModding-Jotunn/package.zip'),
+            'Expected the residual package.zip to be cleaned up during the scan.',
+        );
+        // The actual mod file must be untouched.
+        $this->assertTrue($repository->fileExists('BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll'));
+    }
+
     public function test_scan_reads_icon_png_for_unmanaged_folders(): void
     {
         $repository = new DaemonFileRepository();
