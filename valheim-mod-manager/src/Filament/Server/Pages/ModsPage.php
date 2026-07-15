@@ -19,6 +19,7 @@ use Chr0mX\ValheimModManager\Services\GameProviderRegistry;
 use Chr0mX\ValheimModManager\Services\ModMetadataStore;
 use Chr0mX\ValheimModManager\Services\ModRemovalService;
 use Chr0mX\ValheimModManager\Services\ModToggleService;
+use Chr0mX\ValheimModManager\Support\ProgressReporter;
 use Exception;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -54,6 +55,23 @@ class ModsPage extends Page implements HasTable
 
     /** @var array<string, InstalledModData>|null */
     protected ?array $installedModsCache = null;
+
+    /**
+     * Mod key => progress token, for individual Install/Update actions
+     * currently running in the background. Public so Livewire persists it
+     * across the polling requests that show live progress in the Status
+     * column - a protected property would reset to empty on every request.
+     *
+     * @var array<string, string>
+     */
+    public array $activeProgress = [];
+
+    /**
+     * Progress token for a single in-flight "Update All" / "Update Selected"
+     * batch (BulkUpdateModsJob only ever has one such batch in flight at a
+     * time per page).
+     */
+    public ?string $bulkProgressToken = null;
 
     public static function canAccess(): bool
     {
@@ -130,6 +148,59 @@ class ModsPage extends Page implements HasTable
     }
 
     /**
+     * Drops any tracked progress token whose job has actually finished (or
+     * failed), so polling stops once nothing is left in flight. Called on
+     * every render of the Installed tab, including each poll.
+     */
+    protected function reapCompletedProgress(): void
+    {
+        foreach ($this->activeProgress as $key => $token) {
+            $progress = ProgressReporter::get($token);
+
+            if ($progress === null || in_array($progress['stage'], ['finished', 'failed'], true)) {
+                unset($this->activeProgress[$key]);
+                ProgressReporter::forget($token);
+            }
+        }
+
+        if ($this->bulkProgressToken !== null) {
+            $progress = ProgressReporter::get($this->bulkProgressToken);
+
+            if ($progress === null || $progress['stage'] === 'finished') {
+                ProgressReporter::forget($this->bulkProgressToken);
+                $this->bulkProgressToken = null;
+            }
+        }
+    }
+
+    /**
+     * The live stage for a row currently being installed/updated, or null
+     * if nothing is tracked for it (in which case the column falls back to
+     * its normal ModStatus).
+     */
+    protected function progressStageFor(InstalledMod $record): ?string
+    {
+        $token = $this->activeProgress[$record->key] ?? null;
+
+        if ($token === null) {
+            return null;
+        }
+
+        $progress = ProgressReporter::get($token);
+
+        if ($progress === null || in_array($progress['stage'], ['finished', 'failed'], true)) {
+            return null;
+        }
+
+        return $progress['stage'];
+    }
+
+    protected function isProgressStage(string $state): bool
+    {
+        return array_key_exists($state, trans('valheim-mod-manager::strings.progress'));
+    }
+
+    /**
      * @return array<int, Action>
      */
     protected function getHeaderActions(): array
@@ -158,9 +229,17 @@ class ModsPage extends Page implements HasTable
                     $this->resetTable();
                 }),
             Action::make('update_all')
-                ->label(trans('valheim-mod-manager::strings.toolbar.update_all'))
+                ->label(function () {
+                    if ($this->bulkProgressToken === null) {
+                        return trans('valheim-mod-manager::strings.toolbar.update_all');
+                    }
+
+                    return ProgressReporter::get($this->bulkProgressToken)['stage']
+                        ?? trans('valheim-mod-manager::strings.toolbar.update_all');
+                })
                 ->icon('heroicon-o-arrow-up-circle')
                 ->color('warning')
+                ->disabled(fn () => $this->bulkProgressToken !== null)
                 ->visible(fn () => $this->activeTab === 'installed')
                 ->action(fn () => $this->updateAll()),
             Action::make('settings')
@@ -183,12 +262,15 @@ class ModsPage extends Page implements HasTable
 
     protected function installedTable(Table $table): Table
     {
+        $this->reapCompletedProgress();
+
         $mods = $this->installedMods();
 
         return $table
             ->query(InstalledMod::forServer($this->server(), array_values($mods)))
             ->defaultSort('name')
             ->searchable()
+            ->poll(fn () => (!empty($this->activeProgress) || $this->bulkProgressToken !== null) ? '2s' : null)
             ->columns([
                 ImageColumn::make('icon')
                     ->label(''),
@@ -211,6 +293,12 @@ class ModsPage extends Page implements HasTable
                 TextColumn::make('status')
                     ->label(trans('valheim-mod-manager::strings.table.columns.status'))
                     ->badge()
+                    ->getStateUsing(fn (InstalledMod $record) => $this->progressStageFor($record) ?? $record->status->value)
+                    ->formatStateUsing(fn (string $state) => $this->isProgressStage($state)
+                        ? trans("valheim-mod-manager::strings.progress.$state")
+                        : ModStatus::from($state)->getLabel())
+                    ->color(fn (string $state) => $this->isProgressStage($state) ? 'info' : ModStatus::from($state)->getColor())
+                    ->icon(fn (string $state) => $this->isProgressStage($state) ? 'heroicon-o-arrow-path' : ModStatus::from($state)->getIcon())
                     ->sortable(),
                 TextColumn::make('last_updated')
                     ->label(trans('valheim-mod-manager::strings.table.columns.last_updated'))
@@ -496,6 +584,9 @@ class ModsPage extends Page implements HasTable
             return;
         }
 
+        $token = "update:{$this->server()->id}:$key";
+        $this->activeProgress[$key] = $token;
+
         UpdateModJob::dispatch(
             $this->server(),
             $provider,
@@ -503,7 +594,7 @@ class ModsPage extends Page implements HasTable
             $latestVersion,
             $previousEntry,
             $overwriteConfig,
-            "update:{$this->server()->id}:$key",
+            $token,
             user()?->id,
         );
 
@@ -534,13 +625,16 @@ class ModsPage extends Page implements HasTable
         $key = ModMetadataStore::key($package->owner, $package->name);
         $previousEntry = app(ModMetadataStore::class)->find($this->server(), $provider, $key);
 
+        $token = "install:{$this->server()->id}:$key";
+        $this->activeProgress[$key] = $token;
+
         InstallModJob::dispatch(
             $this->server(),
             $provider,
             $package,
             $latestVersion,
             $overwriteConfig,
-            "install:{$this->server()->id}:$key",
+            $token,
             $previousEntry,
             user()?->id,
         );
@@ -572,12 +666,14 @@ class ModsPage extends Page implements HasTable
             return;
         }
 
+        $this->bulkProgressToken = "bulk-update:{$this->server()->id}";
+
         BulkUpdateModsJob::dispatch(
             $this->server(),
             $this->provider(),
             $keys,
             false,
-            "bulk-update:{$this->server()->id}",
+            $this->bulkProgressToken,
             user()?->id,
         );
 
@@ -595,12 +691,14 @@ class ModsPage extends Page implements HasTable
             return;
         }
 
+        $this->bulkProgressToken = "bulk-update:{$this->server()->id}";
+
         BulkUpdateModsJob::dispatch(
             $this->server(),
             $this->provider(),
             $keys,
             false,
-            "bulk-update:{$this->server()->id}",
+            $this->bulkProgressToken,
             user()?->id,
         );
 

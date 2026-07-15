@@ -42,7 +42,13 @@ class BulkUpdateModsJob implements ShouldQueue
         public ?string $progressToken = null,
         public ?int $notifyUserId = null,
     ) {
-        $this->onQueue('valheim-mod-manager');
+        // Deliberately NOT dispatched to a named queue: Pelican's official
+        // Docker image runs its queue worker as `queue:work --tries=3` with
+        // no `--queue=` flag, which only processes the connection's default
+        // queue. A named queue here would silently never be picked up -
+        // the job just sits forever with no error, log entry, or visible
+        // effect, which is exactly what looked like "the button doesn't
+        // work" with nothing in the logs.
     }
 
     public function handle(ModInstaller $installer, ModMetadataStore $metadataStore, ThunderstoreService $thunderstore): void
