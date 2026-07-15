@@ -31,6 +31,7 @@ final class InstalledModData
         public ?string $latestVersion = null,
         public ?string $lastUpdated = null,
         public bool $managed = false,
+        public ?string $icon = null,
     ) {}
 
     public function updateAvailable(): bool
@@ -62,6 +63,7 @@ final class InstalledModData
             'latest_version' => $this->latestVersion,
             'last_updated' => $this->lastUpdated,
             'managed' => $this->managed,
+            'icon' => $this->icon,
         ];
     }
 }

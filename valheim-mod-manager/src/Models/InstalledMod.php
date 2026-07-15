@@ -29,6 +29,7 @@ use Sushi\Sushi;
  * @property string|null $last_updated
  * @property bool $managed
  * @property bool $update_available
+ * @property string|null $icon
  */
 class InstalledMod extends Model
 {
@@ -83,6 +84,7 @@ class InstalledMod extends Model
             'last_updated' => 'string',
             'managed' => 'boolean',
             'update_available' => 'boolean',
+            'icon' => 'string',
         ];
     }
 
@@ -103,6 +105,7 @@ class InstalledMod extends Model
             'last_updated' => $mod->lastUpdated,
             'managed' => $mod->managed,
             'update_available' => $mod->updateAvailable(),
+            'icon' => $mod->icon,
         ], static::$data);
     }
 
