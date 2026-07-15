@@ -179,4 +179,40 @@ class ModManagerServiceTest extends TestCase
         $this->assertNotNull($withIcon);
         $this->assertSame('data:image/png;base64,' . base64_encode('local-png-bytes'), $withIcon->icon);
     }
+
+    public function test_a_legacy_managed_mod_gets_its_manifest_backfilled(): void
+    {
+        // A mod installed before ModInstaller started keeping manifest.json
+        // alongside the files it installs - only the .dll is on disk.
+        Http::fake([
+            'thunderstore.io/c/valheim/api/v1/package/' => Http::response([
+                $this->fakeThunderstorePackage('ValheimModding', 'Jotunn', '2.17.0', 'https://thunderstore.io/icon/jotunn.png'),
+            ]),
+        ]);
+
+        $repository = new DaemonFileRepository();
+        $server = new Server();
+        $server->id = 1;
+        $provider = new ValheimProvider();
+        $metadataStore = new ModMetadataStore($repository);
+
+        $metadataStore->put($server, $provider, 'ValheimModding', 'Jotunn', '2.17.0', 'BepInEx/plugins', ['ValheimModding-Jotunn'], []);
+        $repository->seedDirectory('BepInEx/plugins/ValheimModding-Jotunn');
+        $repository->seedFile('BepInEx/plugins/ValheimModding-Jotunn/Jotunn.dll', 'binary');
+
+        $this->assertFalse($repository->fileExists('BepInEx/plugins/ValheimModding-Jotunn/manifest.json'));
+
+        $service = $this->service($repository);
+        $service->installedMods($server, $provider);
+
+        $this->assertTrue(
+            $repository->fileExists('BepInEx/plugins/ValheimModding-Jotunn/manifest.json'),
+            'Expected a manifest.json to be backfilled for the legacy managed mod.',
+        );
+
+        $written = json_decode($repository->readRaw('BepInEx/plugins/ValheimModding-Jotunn/manifest.json'), true);
+        $this->assertSame('Jotunn', $written['name']);
+        $this->assertSame('2.17.0', $written['version_number']);
+        $this->assertSame('Jotunn description', $written['description']);
+    }
 }

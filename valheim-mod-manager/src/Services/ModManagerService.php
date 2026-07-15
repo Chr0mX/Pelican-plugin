@@ -75,6 +75,15 @@ class ModManagerService
                         if ($mod->description === '') {
                             $mod->description = $package?->description() ?? '';
                         }
+
+                        // One-time self-heal for mods installed before this
+                        // plugin started keeping manifest.json alongside the
+                        // files it installs: write one now using what's
+                        // already known, so future scans read it straight
+                        // from disk instead of needing this live lookup.
+                        if ($mod->managed && !$mod->hasManifestOnDisk) {
+                            $this->scanner->writeManifestIfMissing($mod, $mod->description);
+                        }
                     }
                 }
 

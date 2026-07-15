@@ -120,13 +120,38 @@ class ModScanner
             default => ModStatus::Installed,
         };
 
+        // Since ModInstaller now keeps manifest.json/icon.png alongside the
+        // files it installs (matching r2modman's layout), a managed mod's
+        // own folder is read the same way an unmanaged one already is. Only
+        // meaningful when this mod's wrapper is a single folder (the "flat
+        // package" install path) - anything else just fails gracefully and
+        // falls back to the ledger's own fields, exactly as before.
+        $manifest = null;
+        $icon = null;
+
+        if (count($entry['files']) === 1) {
+            $folder = $entry['files'][0];
+
+            try {
+                $manifestPath = SafePath::join($entry['directory'], $folder, 'manifest.json');
+                $manifest = ModManifestParser::parse($this->fileRepository->getContent($manifestPath));
+            } catch (Exception) {
+                // Either a loose .dll (no folder to look inside) or an older
+                // install from before manifest.json was kept - that's fine,
+                // ModManagerService's live Thunderstore fallback (and its
+                // one-time manifest backfill) cover this case.
+            }
+
+            $icon = $this->readIcon($entry['directory'], $folder);
+        }
+
         return new InstalledModData(
             key: $key,
             name: $entry['name'],
             namespace: $entry['namespace'],
             version: $entry['version'],
             author: $entry['namespace'],
-            description: '',
+            description: $manifest['description'] ?? '',
             dependencies: array_values(array_filter(array_map(
                 fn (string $dependency) => \Chr0mX\ValheimModManager\DTO\ThunderstoreDependency::fromString($dependency),
                 $entry['dependencies'] ?? []
@@ -137,7 +162,44 @@ class ModScanner
             status: $status,
             lastUpdated: $entry['updated_at'] ?? null,
             managed: true,
+            icon: $icon,
+            hasManifestOnDisk: $manifest !== null,
         );
+    }
+
+    /**
+     * Writes a manifest.json into a managed mod's folder if it doesn't
+     * already have one - a one-time, best-effort backfill for mods that
+     * were installed before this plugin started keeping manifest.json
+     * alongside the files it installs. Silently does nothing for anything
+     * that isn't a single-folder managed install (nothing meaningful to
+     * write into), or if the folder already has one.
+     */
+    public function writeManifestIfMissing(InstalledModData $mod, string $description): void
+    {
+        if (!$mod->managed || $mod->hasManifestOnDisk || count($mod->files) !== 1) {
+            return;
+        }
+
+        $manifestPath = SafePath::join($mod->directory, $mod->files[0], 'manifest.json');
+
+        $manifest = [
+            'name' => $mod->name,
+            'version_number' => $mod->version,
+            'description' => $description,
+            'dependencies' => array_map(
+                fn (\Chr0mX\ValheimModManager\DTO\ThunderstoreDependency $dependency): string => $dependency->toString(),
+                $mod->dependencies
+            ),
+        ];
+
+        try {
+            $this->fileRepository->putContent($manifestPath, json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        } catch (Exception) {
+            // Best effort - if this fails, the live Thunderstore fallback
+            // still covers description/icon, and the backfill is retried
+            // on a later scan.
+        }
     }
 
     /**
@@ -236,13 +298,12 @@ class ModScanner
     }
 
     /**
-     * Only ever attempted for folder-based, unmanaged entries: this
-     * plugin's own ModInstaller deliberately strips icon.png (and every
-     * other metadata file) out of anything it installs itself, so a
-     * managed mod would never have one to find - not worth a guaranteed-
-     * to-fail daemon round trip on every scan. Folders it didn't install
-     * (dropped in manually, or by the egg's own install script) may still
-     * have the icon.png Thunderstore ships inside the package zip.
+     * ModInstaller keeps icon.png alongside anything it installs (for
+     * single-folder "flat package" installs), and unmanaged folders (e.g.
+     * ones the egg's install script or a manual drop-in left intact) may
+     * have kept theirs too. Mods installed before manifest.json/icon.png
+     * were kept (or anything not laid out as a single folder) simply won't
+     * find one here - that's fine, this always fails gracefully.
      */
     protected function readIcon(string $directory, string $name): ?string
     {

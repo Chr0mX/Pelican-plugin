@@ -32,6 +32,7 @@ final class InstalledModData
         public ?string $lastUpdated = null,
         public bool $managed = false,
         public ?string $icon = null,
+        public bool $hasManifestOnDisk = false,
     ) {}
 
     public function updateAvailable(): bool
