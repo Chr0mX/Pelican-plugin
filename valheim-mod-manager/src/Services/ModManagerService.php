@@ -67,6 +67,14 @@ class ModManagerService
                         if ($mod->icon === null) {
                             $mod->icon = $package?->icon();
                         }
+
+                        // ModMetadataStore's ledger never stored a
+                        // description for managed mods, so this was always
+                        // blank for anything installed via this plugin's own
+                        // Install button - same fallback as the icon above.
+                        if ($mod->description === '') {
+                            $mod->description = $package?->description() ?? '';
+                        }
                     }
                 }
 

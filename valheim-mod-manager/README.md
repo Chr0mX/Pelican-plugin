@@ -70,9 +70,12 @@ in-place update - no manual re-import needed from that point on.
 - **Status badges** - Installed, Update Available, Missing Files, Disabled, Unknown.
 - **Activity log** - a third tab lists everything the plugin has done for that server (installed/updated/
   removed/enabled/disabled), stored in a small database table.
-- **Background jobs** - installs and updates run on the `valheim-mod-manager` queue so large downloads never block
-  the request; progress ("Downloading... / Verifying... / Extracting... / Installing... / Finished") is tracked in
-  cache for the page to poll. Enable/disable/remove are fast filesystem renames and run inline.
+- **Background jobs** - installs and updates run as queued jobs (on the connection's default queue - deliberately
+  *not* a named queue, since Pelican's official Docker image starts its worker as `queue:work --tries=3` with no
+  `--queue=` flag and would otherwise never pick them up) so large downloads never block the request; progress
+  ("Downloading... / Verifying... / Extracting... / Installing... / Finished") is tracked in cache and shown live
+  in the Installed tab's Status column and the "Update All" button while polling every 2 seconds. Enable/disable/
+  remove are fast filesystem renames and run inline.
 - **Plugin settings page** (`HasPluginSettings`) - Thunderstore endpoint & community, default game, default install
   directory, automatic update checking, auto-refresh after install, download timeout, temporary directory, and the
   required egg tag are all configurable without touching `.env` by hand.
@@ -127,7 +130,7 @@ src/
   Facades/ValheimModManager.php      Facade over ModManagerService, mirrors the pattern used by other Pelican
                                       mod-manager plugins (e.g. minecraft-modrinth)
 
-  Jobs/           InstallModJob, UpdateModJob, BulkUpdateModsJob (queue: valheim-mod-manager)
+  Jobs/           InstallModJob, UpdateModJob, BulkUpdateModsJob (connection's default queue)
   Models/         InstalledMod (Sushi-backed virtual model for the Filament table), ModActivityLog (real Eloquent)
   Filament/Server/Pages/ModsPage.php  The single "Mods" sidebar page (Installed / Browse / Activity Log tabs)
 ```

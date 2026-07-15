@@ -117,11 +117,12 @@ class ModManagerServiceTest extends TestCase
         );
     }
 
-    public function test_managed_mods_fall_back_to_the_thunderstore_icon(): void
+    public function test_managed_mods_fall_back_to_the_thunderstore_icon_and_description(): void
     {
-        // ModInstaller strips icon.png from anything it installs itself, so
-        // a managed mod can never find one on disk - it should fall back to
-        // the icon Thunderstore reports for that package instead.
+        // ModInstaller strips icon.png from anything it installs itself, and
+        // the metadata ledger never stored a description at all, so a
+        // managed mod can never find either on disk - both should fall back
+        // to what Thunderstore reports for that package.
         Http::fake([
             'thunderstore.io/c/valheim/api/v1/package/' => Http::response([
                 $this->fakeThunderstorePackage('ValheimModding', 'Jotunn', '2.17.0', 'https://thunderstore.io/icon/jotunn.png'),
@@ -144,6 +145,7 @@ class ModManagerServiceTest extends TestCase
         $jotunn = $mods->get('valheimmodding-jotunn');
         $this->assertNotNull($jotunn);
         $this->assertSame('https://thunderstore.io/icon/jotunn.png', $jotunn->icon);
+        $this->assertSame('Jotunn description', $jotunn->description);
     }
 
     public function test_a_disk_icon_is_not_overridden_by_the_thunderstore_fallback(): void
