@@ -356,6 +356,9 @@ class ModsPage extends Page implements HasTable
                 TextColumn::make('latest_version')
                     ->label(trans('valheim-mod-manager::strings.table.columns.latest_version'))
                     ->placeholder('—'),
+                TextColumn::make('last_updated')
+                    ->label(trans('valheim-mod-manager::strings.table.columns.last_updated'))
+                    ->formatStateUsing(fn (?string $state) => $state ? \Illuminate\Support\Carbon::parse($state)->diffForHumans() : '—'),
             ])
             ->recordUrl(fn (array $record): string => $record['package_url'], true)
             ->recordActions([

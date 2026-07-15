@@ -52,8 +52,20 @@ class ModManagerService
 
                 if ($withLatestVersions && config('valheim-mod-manager.auto_update_check', true)) {
                     foreach ($mods as $mod) {
-                        if ($mod->namespace !== null) {
-                            $mod->latestVersion = $this->latestVersionFor($provider, $mod->namespace, $mod->name);
+                        if ($mod->namespace === null) {
+                            continue;
+                        }
+
+                        $package = $this->thunderstore->findPackage($provider, $mod->namespace, $mod->name);
+                        $mod->latestVersion = $package?->latestVersion()?->versionNumber;
+
+                        // Mods this plugin installed itself never have an
+                        // icon.png on disk (the installer strips it), and a
+                        // folder it doesn't manage might not either - fall
+                        // back to Thunderstore's own icon for anything a
+                        // disk read didn't already find one for.
+                        if ($mod->icon === null) {
+                            $mod->icon = $package?->icon();
                         }
                     }
                 }

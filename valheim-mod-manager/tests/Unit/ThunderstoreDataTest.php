@@ -37,6 +37,7 @@ class ThunderstoreDataTest extends TestCase
                     'download_url' => 'https://thunderstore.io/package/download/denikson/BepInExPack_Valheim/5.4.2202/',
                     'downloads' => 200,
                     'file_size' => 2000,
+                    'date_created' => '2026-07-01T00:00:00Z',
                     'dependencies' => [],
                 ],
             ],
@@ -97,6 +98,7 @@ class ThunderstoreDataTest extends TestCase
         $this->assertSame('newest', $row['description']);
         $this->assertSame(200, $row['downloads']);
         $this->assertSame('5.4.2202', $row['latest_version']);
+        $this->assertSame('2026-07-01T00:00:00Z', $row['last_updated']);
     }
 
     public function test_to_table_row_uses_null_latest_version_when_no_versions_exist(): void
@@ -108,6 +110,7 @@ class ThunderstoreDataTest extends TestCase
 
         $this->assertNull($row['latest_version']);
         $this->assertNull($row['icon']);
+        $this->assertNull($row['last_updated']);
         $this->assertSame(0, $row['downloads']);
     }
 }
