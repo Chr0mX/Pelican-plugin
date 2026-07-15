@@ -143,6 +143,8 @@ class ModScanner
             }
 
             $icon = $this->readIcon($entry['directory'], $folder);
+
+            $this->deleteResidualZipIfPresent($entry['directory'], $folder);
         }
 
         return new InstalledModData(
@@ -165,6 +167,22 @@ class ModScanner
             icon: $icon,
             hasManifestOnDisk: $manifest !== null,
         );
+    }
+
+    /**
+     * A one-time, best-effort cleanup for mods installed before ModInstaller
+     * excluded its own downloaded zip from the payload: package.zip used to
+     * get moved into the live mod folder right alongside the actual files.
+     * Safe to call unconditionally - deleting a path that doesn't exist is a
+     * no-op, not an error.
+     */
+    protected function deleteResidualZipIfPresent(string $directory, string $folder): void
+    {
+        try {
+            $this->fileRepository->deleteFiles('/', [SafePath::join($directory, $folder, ModInstaller::ZIP_NAME)]);
+        } catch (Exception) {
+            // Best effort - if this fails, it's retried on a later scan.
+        }
     }
 
     /**

@@ -33,7 +33,12 @@ class ModInstaller
     // license aren't read by anything, so there's no reason to keep them.
     private const METADATA_FILES = ['readme.md', 'changelog.md', 'changelog.txt', 'license'];
 
-    private const ZIP_NAME = 'package.zip';
+    /**
+     * Public so ModScanner can clean up any package.zip left behind in a
+     * mod's folder from before this filename was excluded from the payload
+     * (see ModScanner::deleteResidualZipIfPresent()).
+     */
+    public const ZIP_NAME = 'package.zip';
 
     public function __construct(
         protected DaemonFileRepository $fileRepository,
