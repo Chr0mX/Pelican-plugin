@@ -2,7 +2,7 @@
 
 All notable changes to the Valheim Mod Manager plugin are documented in this file.
 
-## [1.0.16] - Unreleased
+## [1.1] - 2026-08-18
 
 ### Fixed
 - **Missing `getSettingsFormData()` implementation.** Pelican Panel's `HasPluginSettings` interface (which this
@@ -143,7 +143,7 @@ Version bump only, published to keep the release history moving forward after 1.
   `BepInEx/config`, safe uninstall, enable/disable, activity log, plugin settings page, and background install/
   update jobs.
 
-[1.0.16]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.15...HEAD
+[1.1]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.15...1.1
 [1.0.15]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.14...1.0.15
 [1.0.14]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.13...1.0.14
 [1.0.13]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.12...1.0.13
