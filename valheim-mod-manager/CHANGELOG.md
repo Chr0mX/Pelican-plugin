@@ -2,7 +2,19 @@
 
 All notable changes to the Valheim Mod Manager plugin are documented in this file.
 
-## [1.0.15] - Unreleased
+## [1.0.16] - Unreleased
+
+### Fixed
+- **Missing `getSettingsFormData()` implementation.** Pelican Panel's `HasPluginSettings` interface (which this
+  plugin implements for its settings page) gained a new required method upstream - `getSettingsFormData()`, used
+  to pre-fill the settings form via Filament's `->fillForm()` instead of relying solely on each field's own
+  `->default()` - see [pelican-dev/panel#2453](https://github.com/pelican-dev/panel/pull/2453). Without it, this
+  plugin's class fails to load on panel versions built after that change: a PHP fatal error
+  ("Class ... contains 1 abstract method and must therefore be declared abstract or implement the remaining
+  methods"). Added a matching implementation, plus a test that reproduces the fatal error whenever the interface
+  drifts out of sync again in the future.
+
+## [1.0.15] - 2026-07-15
 
 ### Fixed
 - **Residual `package.zip` from before 1.0.14 never got cleaned up.** 1.0.14 stopped *new* installs/updates from
@@ -131,7 +143,8 @@ Version bump only, published to keep the release history moving forward after 1.
   `BepInEx/config`, safe uninstall, enable/disable, activity log, plugin settings page, and background install/
   update jobs.
 
-[1.0.15]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.14...HEAD
+[1.0.16]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.15...HEAD
+[1.0.15]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.14...1.0.15
 [1.0.14]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.13...1.0.14
 [1.0.13]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.12...1.0.13
 [1.0.12]: https://github.com/Chr0mX/Pelican-plugin/compare/1.0.11...1.0.12

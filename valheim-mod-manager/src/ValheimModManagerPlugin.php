@@ -33,6 +33,30 @@ class ValheimModManagerPlugin implements HasPluginSettings, Plugin
     public function boot(Panel $panel): void {}
 
     /**
+     * Pre-fills the settings form (via Filament's ->fillForm()) with the
+     * currently saved values. Each field below also carries its own
+     * ->default() closure so the form still populates correctly on panel
+     * versions that predate this interface method (added upstream in
+     * pelican-dev/panel; HasPluginSettings did not always require it).
+     *
+     * @return array<string, mixed>
+     */
+    public function getSettingsFormData(): array
+    {
+        return [
+            'thunderstore_api_url' => config('valheim-mod-manager.thunderstore_api_url'),
+            'thunderstore_community' => config('valheim-mod-manager.thunderstore_community'),
+            'default_game' => config('valheim-mod-manager.default_game'),
+            'default_install_directory' => config('valheim-mod-manager.default_install_directory'),
+            'auto_update_check' => config('valheim-mod-manager.auto_update_check'),
+            'auto_refresh_after_install' => config('valheim-mod-manager.auto_refresh_after_install'),
+            'download_timeout' => config('valheim-mod-manager.download_timeout'),
+            'temporary_directory' => config('valheim-mod-manager.temporary_directory'),
+            'required_tag' => config('valheim-mod-manager.required_tag'),
+        ];
+    }
+
+    /**
      * @return array<int, mixed>
      */
     public function getSettingsForm(): array
