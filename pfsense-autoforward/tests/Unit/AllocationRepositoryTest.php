@@ -2,11 +2,14 @@
 
 namespace Chr0mX\PfSenseAutoForward\Tests\Unit;
 
+use App\Enums\ContainerStatus;
 use App\Models\Allocation;
 use App\Models\Egg;
 use App\Models\Node;
 use App\Models\Server;
+use Chr0mX\PfSenseAutoForward\Models\PortForwardOverride;
 use Chr0mX\PfSenseAutoForward\Services\AllocationRepository;
+use Chr0mX\PfSenseAutoForward\Services\ServerStatusResolver;
 use Chr0mX\PfSenseAutoForward\Tests\TestCase;
 
 class AllocationRepositoryTest extends TestCase
@@ -34,6 +37,11 @@ class AllocationRepositoryTest extends TestCase
         $this->assertSame(25565, $rule->port);
         $this->assertSame('tcp/udp', $rule->protocol);
         $this->assertSame('Frankfurt | Survival | 25565/tcp/udp', $rule->describe());
+        // The stub Server defaults to ContainerStatus::Running, and there's
+        // no override, so this should resolve active/enabled through the
+        // real ServerStatusResolver.
+        $this->assertTrue($rule->serverActive);
+        $this->assertTrue($rule->enabled);
     }
 
     public function test_falls_back_to_a_node_id_label_when_the_node_relation_is_missing(): void
@@ -126,5 +134,97 @@ class AllocationRepositoryTest extends TestCase
         $this->assertNotNull($repository->mapAllocation($matchesBoth));
         $this->assertNull($repository->mapAllocation($wrongNodeOnly));
         $this->assertNull($repository->mapAllocation($wrongTagOnly));
+    }
+
+    public function test_a_stopped_server_maps_to_a_disabled_rule(): void
+    {
+        $allocation = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, status: ContainerStatus::Offline),
+        );
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation);
+
+        $this->assertFalse($rule->serverActive);
+        $this->assertFalse($rule->enabled);
+    }
+
+    public function test_disable_when_offline_false_reports_active_without_checking_the_server(): void
+    {
+        config()->set('pfsense-autoforward.disable_when_offline', false);
+
+        $resolver = $this->createMock(ServerStatusResolver::class);
+        $resolver->expects($this->never())->method('isActive');
+
+        $allocation = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, status: ContainerStatus::Offline),
+        );
+
+        $rule = (new AllocationRepository($resolver))->mapAllocation($allocation);
+
+        $this->assertTrue($rule->serverActive);
+        $this->assertTrue($rule->enabled);
+    }
+
+    public function test_enabled_override_forces_the_rule_on_for_a_stopped_server(): void
+    {
+        $allocation = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, status: ContainerStatus::Offline),
+        );
+        $override = new PortForwardOverride(['enabled_override' => true]);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation, $override);
+
+        // The raw automatic reading still reflects reality...
+        $this->assertFalse($rule->serverActive);
+        // ...but the resolved, actually-sent state is forced on.
+        $this->assertTrue($rule->enabled);
+    }
+
+    public function test_enabled_override_forces_the_rule_off_for_a_running_server(): void
+    {
+        $allocation = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, status: ContainerStatus::Running),
+        );
+        $override = new PortForwardOverride(['enabled_override' => false]);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation, $override);
+
+        $this->assertTrue($rule->serverActive);
+        $this->assertFalse($rule->enabled);
+    }
+
+    public function test_protocol_override_takes_precedence_over_the_default(): void
+    {
+        $allocation = new Allocation(id: 1, server_id: 1, server: new Server(id: 1));
+        $override = new PortForwardOverride(['protocol' => 'udp']);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation, $override);
+
+        $this->assertSame('udp', $rule->protocol);
+    }
+
+    public function test_a_null_override_field_falls_back_to_automatic_behaviour(): void
+    {
+        $allocation = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, status: ContainerStatus::Running),
+        );
+        // A row exists (e.g. only the protocol was ever overridden) but
+        // enabled_override itself was never set.
+        $override = new PortForwardOverride(['protocol' => 'udp', 'enabled_override' => null]);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation, $override);
+
+        $this->assertSame('udp', $rule->protocol);
+        $this->assertTrue($rule->enabled);
     }
 }

@@ -18,7 +18,17 @@ final readonly class PortForwardRule
         public string $nodeName,
         public string $targetIp,
         public int $port,
+        // Final, already-resolved protocol for this rule - the plugin's
+        // default_protocol setting, or a per-allocation override if one is
+        // set. Reconciler/PfSenseApiClient never need to know which.
         public string $protocol,
+        // Raw automatic state - is the server actually running right now?
+        // Purely informational (shown on the admin table); $enabled below
+        // is what actually controls the pfSense rule.
+        public bool $serverActive,
+        // Final, already-resolved "should this rule currently be enabled"
+        // - $serverActive, unless a manual override forces it on/off.
+        public bool $enabled,
     ) {}
 
     /**

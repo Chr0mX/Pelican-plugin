@@ -4,24 +4,37 @@ namespace Chr0mX\PfSenseAutoForward\Filament\Admin\Pages;
 
 use BackedEnum;
 use Chr0mX\PfSenseAutoForward\Jobs\ReconcilePortForwardsJob;
+use Chr0mX\PfSenseAutoForward\Services\PortForwardOverrideService;
 use Chr0mX\PfSenseAutoForward\Support\ReconciliationStatus;
 use Filament\Actions\Action;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\SelectColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Concerns\InteractsWithTable;
+use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Poll;
 
 /**
  * Status/control page: shows the outcome of the last reconciliation
- * (scheduled or manual) and offers a "Sync Now" button. Polls itself every
- * few seconds so a queued sync's result shows up without a manual refresh.
+ * (scheduled or manual), a "Currently mapped" table with an inline enable/
+ * disable toggle and forward-type select per allocation, and a "Sync Now"
+ * button. Polls itself every few seconds so a queued sync's result shows
+ * up without a manual refresh.
  */
 #[Poll('5s')]
-class PfSenseForwardingPage extends Page
+class PfSenseForwardingPage extends Page implements HasTable
 {
+    use InteractsWithTable;
+
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-signal';
 
     protected static ?string $slug = 'pfsense-forwarding';
@@ -47,16 +60,10 @@ class PfSenseForwardingPage extends Page
             Action::make('sync_now')
                 ->label(trans('pfsense-autoforward::strings.actions.sync_now'))
                 ->icon('heroicon-o-arrow-path')
-                ->action(function () {
-                    ReconciliationStatus::markRunning();
-                    ReconcilePortForwardsJob::dispatch();
-
-                    Notification::make()
-                        ->title(trans('pfsense-autoforward::strings.notifications.sync_queued'))
-                        ->body(trans('pfsense-autoforward::strings.notifications.sync_queued_body'))
-                        ->success()
-                        ->send();
-                }),
+                ->action(fn () => $this->queueSync(
+                    trans('pfsense-autoforward::strings.notifications.sync_queued'),
+                    trans('pfsense-autoforward::strings.notifications.sync_queued_body'),
+                )),
         ];
     }
 
@@ -64,7 +71,6 @@ class PfSenseForwardingPage extends Page
     {
         $status = ReconciliationStatus::get();
         $summary = $status['summary'];
-        $mappedLines = $summary['mapped_lines'] ?? [];
         $removedLines = $summary['removed_lines'] ?? [];
         $errors = $summary['errors'] ?? [];
 
@@ -91,16 +97,7 @@ class PfSenseForwardingPage extends Page
                         ->state($this->summaryLine($summary))
                         ->visible($summary !== null),
                 ]),
-            Section::make(trans('pfsense-autoforward::strings.page.mapped_heading'))
-                ->description(trans('pfsense-autoforward::strings.page.mapped_description'))
-                ->schema([
-                    TextEntry::make('mapped_lines')
-                        ->hiddenLabel()
-                        ->state($mappedLines)
-                        ->listWithLineBreaks()
-                        ->bulleted(),
-                ])
-                ->visible($mappedLines !== []),
+            EmbeddedTable::make(),
             Section::make(trans('pfsense-autoforward::strings.page.removed_heading'))
                 ->schema([
                     TextEntry::make('removed_lines')
@@ -122,6 +119,91 @@ class PfSenseForwardingPage extends Page
                 ])
                 ->visible($errors !== []),
         ]);
+    }
+
+    public function table(Table $table): Table
+    {
+        $rows = collect(ReconciliationStatus::get()['summary']['mapped_rows'] ?? []);
+
+        return $table
+            ->heading(trans('pfsense-autoforward::strings.page.mapped_heading'))
+            ->records(fn () => $rows)
+            ->columns([
+                TextColumn::make('node')
+                    ->label(trans('pfsense-autoforward::strings.page.table.node'))
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('server')
+                    ->label(trans('pfsense-autoforward::strings.page.table.server'))
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('port')
+                    ->label(trans('pfsense-autoforward::strings.page.table.port'))
+                    ->sortable(),
+                SelectColumn::make('protocol')
+                    ->label(trans('pfsense-autoforward::strings.page.table.protocol'))
+                    ->options(trans('pfsense-autoforward::strings.page.protocol_options'))
+                    ->selectablePlaceholder(false)
+                    ->updateStateUsing(function (array $record, string $state) {
+                        app(PortForwardOverrideService::class)->setProtocol((int) $record['allocation_id'], $state);
+                        $this->queueSync(
+                            trans('pfsense-autoforward::strings.notifications.override_saved'),
+                            trans('pfsense-autoforward::strings.notifications.override_saved_body'),
+                        );
+
+                        return $state;
+                    }),
+                IconColumn::make('server_active')
+                    ->label(trans('pfsense-autoforward::strings.page.table.server_status'))
+                    ->boolean()
+                    ->trueIcon('heroicon-o-play-circle')
+                    ->falseIcon('heroicon-o-stop-circle')
+                    ->trueColor('success')
+                    ->falseColor('gray'),
+                ToggleColumn::make('rule_enabled')
+                    ->label(trans('pfsense-autoforward::strings.page.table.rule_status'))
+                    ->updateStateUsing(function (array $record, bool $state) {
+                        app(PortForwardOverrideService::class)->setEnabledOverride((int) $record['allocation_id'], $state);
+                        $this->queueSync(
+                            trans('pfsense-autoforward::strings.notifications.override_saved'),
+                            trans('pfsense-autoforward::strings.notifications.override_saved_body'),
+                        );
+
+                        return $state;
+                    }),
+            ])
+            ->recordActions([
+                Action::make('reset_override')
+                    ->label(trans('pfsense-autoforward::strings.page.table.reset_override'))
+                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->color('gray')
+                    ->action(function (array $record) {
+                        app(PortForwardOverrideService::class)->clear((int) $record['allocation_id']);
+                        $this->queueSync(
+                            trans('pfsense-autoforward::strings.notifications.override_reset'),
+                        );
+                    }),
+            ])
+            ->emptyStateHeading(trans('pfsense-autoforward::strings.page.mapped_empty'));
+    }
+
+    /**
+     * Shared by "Sync Now" and every inline table edit (enable/disable
+     * toggle, forward-type select, reset-to-automatic) - all of them need
+     * the same thing: persist, then queue a reconciliation so pfSense
+     * actually reflects it. Runs on the queue (see ReconcilePortForwardsJob)
+     * so a table edit never blocks the request.
+     */
+    private function queueSync(string $title, ?string $body = null): void
+    {
+        ReconciliationStatus::markRunning();
+        ReconcilePortForwardsJob::dispatch();
+
+        Notification::make()
+            ->title($title)
+            ->body($body)
+            ->success()
+            ->send();
     }
 
     private function statusLabel(string $state): string
@@ -151,6 +233,9 @@ class PfSenseForwardingPage extends Page
         return implode(' · ', array_filter([
             trans('pfsense-autoforward::strings.page.summary.created', ['count' => $summary['created'] ?? 0]),
             trans('pfsense-autoforward::strings.page.summary.removed', ['count' => $summary['removed'] ?? 0]),
+            ($summary['toggled'] ?? 0) > 0
+                ? trans('pfsense-autoforward::strings.page.summary.toggled', ['count' => $summary['toggled']])
+                : null,
             trans('pfsense-autoforward::strings.page.summary.unchanged', ['count' => $summary['unchanged'] ?? 0]),
             ($summary['failed'] ?? 0) > 0
                 ? trans('pfsense-autoforward::strings.page.summary.failed', ['count' => $summary['failed']])

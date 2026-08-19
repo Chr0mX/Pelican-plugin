@@ -20,7 +20,7 @@ class PfSenseApiClientTest extends TestCase
         );
     }
 
-    private function rule(): PortForwardRule
+    private function rule(bool $enabled = true): PortForwardRule
     {
         return new PortForwardRule(
             allocationId: 1,
@@ -30,6 +30,8 @@ class PfSenseApiClientTest extends TestCase
             targetIp: '10.0.0.5',
             port: 25565,
             protocol: 'tcp/udp',
+            serverActive: $enabled,
+            enabled: $enabled,
         );
     }
 
@@ -74,8 +76,18 @@ class PfSenseApiClientTest extends TestCase
                 && $request['destination_port'] === '25565'
                 && $request['local_port'] === '25565'
                 && $request['destination'] === 'wan:ip'
-                && $request['source'] === 'any';
+                && $request['source'] === 'any'
+                && $request['disabled'] === false;
         });
+    }
+
+    public function test_creates_a_disabled_port_forward_for_a_rule_that_should_not_be_enabled(): void
+    {
+        Http::fake(['pfsense.example.test/*' => Http::response(['data' => []])]);
+
+        $this->client()->createPortForward($this->rule(enabled: false));
+
+        Http::assertSent(fn ($request) => $request['disabled'] === true);
     }
 
     public function test_creates_a_pass_rule_with_interface_as_an_array(): void
@@ -91,7 +103,38 @@ class PfSenseApiClientTest extends TestCase
                 && $request['interface'] === ['wan']
                 && $request['destination'] === '10.0.0.5'
                 && $request['destination_port'] === '25565'
-                && $request['descr'] === 'pelican:aaaa:1';
+                && $request['descr'] === 'pelican:aaaa:1'
+                && $request['disabled'] === false;
+        });
+    }
+
+    public function test_updates_an_existing_port_forward_by_id_with_disabled_and_protocol(): void
+    {
+        Http::fake(['pfsense.example.test/*' => Http::response(['data' => []])]);
+
+        $this->client()->updatePortForwardRule(42, true, 'udp');
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'PATCH'
+                && str_ends_with(explode('?', $request->url())[0], '/api/v2/firewall/nat/port_forward')
+                && $request['id'] === 42
+                && $request['disabled'] === true
+                && $request['protocol'] === 'udp';
+        });
+    }
+
+    public function test_updates_an_existing_pass_rule_by_id_with_disabled_and_protocol(): void
+    {
+        Http::fake(['pfsense.example.test/*' => Http::response(['data' => []])]);
+
+        $this->client()->updatePassRule(43, false, 'tcp');
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'PATCH'
+                && str_ends_with(explode('?', $request->url())[0], '/api/v2/firewall/rule')
+                && $request['id'] === 43
+                && $request['disabled'] === false
+                && $request['protocol'] === 'tcp';
         });
     }
 

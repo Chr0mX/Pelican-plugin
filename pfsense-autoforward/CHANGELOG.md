@@ -2,6 +2,32 @@
 
 All notable changes to the pfSense Auto NAT/Port-Forward plugin are documented in this file.
 
+## [1.1.0] - 2026-08-19
+
+### Added
+- **Rules now follow their server's power state.** When on (the new default), a mapped rule is only enabled while its
+  server is actually running - stopped servers get their port forward *disabled*, not removed, so it's back the
+  instant the server starts again with no re-create needed. Server state is read live via `Server::retrieveStatus()`
+  (the same Wings call/cache the panel's own console uses); if the daemon can't be reached, the rule is left as-is
+  rather than guessed at (fails open, not closed). Turn off entirely with the new **Disable rule when server is
+  stopped** setting (`PFSENSEAF_DISABLE_WHEN_OFFLINE`) to go back to pre-1.1 behaviour.
+- **Redesigned "Currently mapped" section as a real table** (Node, Server, Port, Forward type, Server, Rule), with:
+  - An inline **toggle** to force a rule enabled or disabled regardless of automatic server-state behaviour.
+  - An inline **forward type select** (All/TCP/UDP) to override the protocol for one allocation, independent of the
+    plugin-wide default.
+  - A **"Reset to automatic"** row action to clear both overrides and return to fully automatic behaviour.
+  - Both controls persist to a new `pfsense_autoforward_overrides` table (one row per allocation with a non-default
+    setting) and immediately queue a sync so pfSense reflects the change without waiting for the next scheduled run.
+- New migration `pfsense_autoforward_overrides` (auto-runs on install/update, same as any other plugin migration) -
+  `allocation_id` (unique, cascades on the allocation's own deletion), nullable `protocol`, nullable
+  `enabled_override`.
+
+### Changed
+- Existing rules are now also PATCHed (not just created/removed) whenever their desired `disabled` or `protocol`
+  value drifts from what pfSense currently has - previously the reconciler only ever created missing rules or removed
+  orphaned ones.
+- Admin page summary line gains a "N enable/disable synced" segment alongside created/removed/unchanged/failed.
+
 ## [1.0.2] - 2026-08-19
 
 ### Added

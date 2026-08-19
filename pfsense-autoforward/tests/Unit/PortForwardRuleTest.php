@@ -17,6 +17,8 @@ class PortForwardRuleTest extends TestCase
             targetIp: '10.0.0.5',
             port: 25565,
             protocol: 'tcp/udp',
+            serverActive: true,
+            enabled: true,
         );
 
         $this->assertSame('pelican:11111111-1111-1111-1111-111111111111:42', $rule->descrTag());
@@ -29,6 +31,8 @@ class PortForwardRuleTest extends TestCase
             targetIp: '10.0.0.9',
             port: 30000,
             protocol: 'tcp/udp',
+            serverActive: true,
+            enabled: true,
         );
 
         $this->assertSame($rule->descrTag(), $movedPort->descrTag());
