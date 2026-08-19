@@ -45,8 +45,10 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
             'pfsense_url' => config('pfsense-autoforward.pfsense_url'),
             'pfsense_api_key' => config('pfsense-autoforward.pfsense_api_key'),
             'pfsense_interface' => config('pfsense-autoforward.pfsense_interface'),
+            'verify_tls' => config('pfsense-autoforward.verify_tls'),
             'default_protocol' => config('pfsense-autoforward.default_protocol'),
             'required_egg_tag' => config('pfsense-autoforward.required_egg_tag'),
+            'allowed_node_ids' => config('pfsense-autoforward.allowed_node_ids'),
             'reconcile_interval_minutes' => config('pfsense-autoforward.reconcile_interval_minutes'),
             'dry_run' => config('pfsense-autoforward.dry_run'),
             'request_timeout' => config('pfsense-autoforward.request_timeout'),
@@ -76,6 +78,11 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
                 ->helperText('The interface pfSense-pkg-RESTAPI identifies NAT/pass rules by, e.g. "wan".')
                 ->required()
                 ->default(fn () => config('pfsense-autoforward.pfsense_interface')),
+            Toggle::make('verify_tls')
+                ->label('Verify TLS certificate')
+                ->helperText('Turn off only if pfSense is using a self-signed certificate you already trust the identity of - otherwise every sync fails with a TLS error.')
+                ->inline(false)
+                ->default(fn () => config('pfsense-autoforward.verify_tls')),
             Select::make('default_protocol')
                 ->label('Default protocol')
                 ->options([
@@ -89,6 +96,10 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
                 ->label('Required egg tag')
                 ->helperText('Only servers whose egg carries this tag are forwarded. Leave blank to forward every assigned allocation on the panel.')
                 ->default(fn () => config('pfsense-autoforward.required_egg_tag')),
+            TextInput::make('allowed_node_ids')
+                ->label('Allowed node IDs')
+                ->helperText('Comma-separated Pelican node IDs (e.g. "1,3"). Only allocations on these nodes are forwarded. Leave blank to allow every node.')
+                ->default(fn () => config('pfsense-autoforward.allowed_node_ids')),
             TextInput::make('reconcile_interval_minutes')
                 ->label('Reconcile interval (minutes)')
                 ->numeric()
@@ -120,8 +131,10 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
             'PFSENSEAF_URL' => $data['pfsense_url'],
             'PFSENSEAF_API_KEY' => $data['pfsense_api_key'],
             'PFSENSEAF_INTERFACE' => $data['pfsense_interface'],
+            'PFSENSEAF_VERIFY_TLS' => $data['verify_tls'] ? 'true' : 'false',
             'PFSENSEAF_DEFAULT_PROTOCOL' => $data['default_protocol'],
             'PFSENSEAF_REQUIRED_EGG_TAG' => $data['required_egg_tag'],
+            'PFSENSEAF_ALLOWED_NODE_IDS' => $data['allowed_node_ids'],
             'PFSENSEAF_RECONCILE_INTERVAL_MINUTES' => $data['reconcile_interval_minutes'],
             'PFSENSEAF_DRY_RUN' => $data['dry_run'] ? 'true' : 'false',
             'PFSENSEAF_REQUEST_TIMEOUT' => $data['request_timeout'],

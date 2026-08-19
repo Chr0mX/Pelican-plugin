@@ -6,6 +6,7 @@ use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
 use Chr0mX\PfSenseAutoForward\Exceptions\PfSenseApiException;
 use Chr0mX\PfSenseAutoForward\Services\PfSenseApiClient;
 use Chr0mX\PfSenseAutoForward\Tests\TestCase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 class PfSenseApiClientTest extends TestCase
@@ -113,5 +114,41 @@ class PfSenseApiClientTest extends TestCase
         $this->expectException(PfSenseApiException::class);
 
         $this->client()->listPortForwardRules();
+    }
+
+    public function test_wraps_a_connection_failure_as_a_pfsense_api_exception(): void
+    {
+        // Simulates what actually happens against a pfSense box with a
+        // self-signed cert (or any other TLS/DNS/timeout failure): Guzzle
+        // never gets as far as an HTTP response, so Http::send() throws
+        // ConnectionException directly rather than returning a failed
+        // Response. Callers should only ever need to catch
+        // PfSenseApiException, so the client must translate this too.
+        Http::fake(function () {
+            throw new ConnectionException('cURL error 60: SSL certificate problem: self-signed certificate');
+        });
+
+        $this->expectException(PfSenseApiException::class);
+
+        $this->client()->listPortForwardRules();
+    }
+
+    public function test_verify_tls_false_still_completes_a_request(): void
+    {
+        // Mainly guards against a typo breaking the withOptions() call
+        // itself (e.g. wrong option key) - Http::fake() bypasses the actual
+        // TLS handshake either way, so this can't assert Guzzle's `verify`
+        // option was set, only that passing verifyTls: false doesn't throw
+        // or otherwise change request construction.
+        Http::fake(['pfsense.example.test/*' => Http::response(['data' => []])]);
+
+        $client = new PfSenseApiClient(
+            baseUrl: 'https://pfsense.example.test',
+            apiKey: 'secret-key',
+            interface: 'wan',
+            verifyTls: false,
+        );
+
+        $this->assertSame([], $client->listPortForwardRules());
     }
 }

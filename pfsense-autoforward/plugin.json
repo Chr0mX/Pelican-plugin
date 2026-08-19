@@ -2,7 +2,7 @@
     "id": "pfsense-autoforward",
     "name": "pfSense Auto NAT/Port-Forward",
     "author": "chr0mX",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Automatically creates and removes pfSense NAT port-forward + firewall pass rules to match Pelican server port allocations.",
     "category": "plugin",
     "url": "https://github.com/Chr0mX/Pelican-plugin",

@@ -59,6 +59,11 @@ class AllocationRepository
             return false;
         }
 
+        return $this->matchesRequiredEggTag($allocation) && $this->matchesAllowedNode($allocation);
+    }
+
+    private function matchesRequiredEggTag(Allocation $allocation): bool
+    {
         $requiredTag = config('pfsense-autoforward.required_egg_tag');
 
         if (blank($requiredTag)) {
@@ -68,5 +73,39 @@ class AllocationRepository
         $tags = $allocation->server->egg->tags ?? [];
 
         return in_array($requiredTag, $tags, true);
+    }
+
+    private function matchesAllowedNode(Allocation $allocation): bool
+    {
+        $allowedNodeIds = $this->allowedNodeIds();
+
+        if ($allowedNodeIds === null) {
+            return true;
+        }
+
+        return in_array($allocation->node_id, $allowedNodeIds, true);
+    }
+
+    /**
+     * Parses the comma-separated `allowed_node_ids` config value (e.g.
+     * "1, 3") into a list of ints, or null if it's unset - meaning every
+     * node is allowed.
+     *
+     * @return int[]|null
+     */
+    private function allowedNodeIds(): ?array
+    {
+        $raw = config('pfsense-autoforward.allowed_node_ids');
+
+        if (blank($raw)) {
+            return null;
+        }
+
+        $ids = array_filter(array_map(
+            fn (string $id) => (int) trim($id),
+            explode(',', (string) $raw),
+        ), fn (int $id) => $id > 0);
+
+        return $ids === [] ? null : array_values($ids);
     }
 }

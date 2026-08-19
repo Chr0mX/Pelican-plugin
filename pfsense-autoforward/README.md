@@ -63,14 +63,19 @@ Available from the plugin list in the admin panel (this is where Pelican surface
 | pfSense REST API base URL   | `PFSENSEAF_URL`                             | -         |
 | pfSense REST API key        | `PFSENSEAF_API_KEY`                         | -         |
 | pfSense interface           | `PFSENSEAF_INTERFACE`                       | `wan`     |
+| Verify TLS certificate      | `PFSENSEAF_VERIFY_TLS`                      | `true`    |
 | Default protocol            | `PFSENSEAF_DEFAULT_PROTOCOL`                | `tcp/udp` |
 | Required egg tag            | `PFSENSEAF_REQUIRED_EGG_TAG`                | -         |
+| Allowed node IDs            | `PFSENSEAF_ALLOWED_NODE_IDS`                | -         |
 | Reconcile interval (minutes)| `PFSENSEAF_RECONCILE_INTERVAL_MINUTES`      | `5`       |
 | Dry run                     | `PFSENSEAF_DRY_RUN`                         | `false`   |
 | Request timeout (seconds)   | `PFSENSEAF_REQUEST_TIMEOUT`                 | `15`      |
 
 Leave **Required egg tag** blank to forward every assigned allocation on the panel - only do that if every node behind
-it should genuinely be internet-reachable through pfSense.
+it should genuinely be internet-reachable through pfSense. **Allowed node IDs** (comma-separated, e.g. `1,3`) narrows
+further to specific Pelican nodes - the two combine with AND when both are set. **Verify TLS certificate** should stay
+on unless pfSense is using a self-signed cert you already trust the identity of (its default cert, unless you've
+installed a real one) - turning it off is what makes syncing against a typical LAN pfSense box work at all.
 
 ## Features
 

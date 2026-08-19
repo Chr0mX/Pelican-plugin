@@ -4,6 +4,7 @@ namespace Chr0mX\PfSenseAutoForward\Services;
 
 use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
 use Chr0mX\PfSenseAutoForward\Exceptions\PfSenseApiException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -41,6 +42,10 @@ class PfSenseApiClient
         private readonly string $apiKey,
         private readonly string $interface,
         private readonly int $timeout = 15,
+        // pfSense's default webConfigurator/API certificate is self-signed
+        // unless the admin has installed a trusted one, so this defaults to
+        // verifying - but stays overridable for exactly that common case.
+        private readonly bool $verifyTls = true,
     ) {}
 
     /**
@@ -131,14 +136,27 @@ class PfSenseApiClient
      */
     private function request(string $method, string $path, array $body = [], array $query = []): array
     {
-        $response = Http::withHeaders(['X-API-Key' => $this->apiKey])
-            ->asJson()
-            ->acceptJson()
-            ->timeout($this->timeout)
-            ->send($method, rtrim($this->baseUrl, '/') . $path, [
-                'json' => $body,
-                'query' => $query,
-            ]);
+        try {
+            $response = Http::withHeaders(['X-API-Key' => $this->apiKey])
+                ->asJson()
+                ->acceptJson()
+                ->timeout($this->timeout)
+                ->withOptions(['verify' => $this->verifyTls])
+                ->send($method, rtrim($this->baseUrl, '/') . $path, [
+                    'json' => $body,
+                    'query' => $query,
+                ]);
+        } catch (ConnectionException $e) {
+            // Thrown for anything that never got as far as an HTTP
+            // response - TLS handshake failures (e.g. pfSense's self-signed
+            // cert with verify_tls left on), DNS failures, timeouts,
+            // connection refused. Wrapped here so every caller only ever
+            // has to catch PfSenseApiException, not this too.
+            throw new PfSenseApiException(
+                "pfSense API request failed: $method $path ({$e->getMessage()})",
+                0,
+            );
+        }
 
         if ($response->failed()) {
             throw new PfSenseApiException(

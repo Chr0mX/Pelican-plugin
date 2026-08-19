@@ -53,6 +53,7 @@ class ReconcilePortForwardsJob implements ShouldQueue
             apiKey: $apiKey,
             interface: (string) config('pfsense-autoforward.pfsense_interface', 'wan'),
             timeout: (int) config('pfsense-autoforward.request_timeout', 15),
+            verifyTls: (bool) config('pfsense-autoforward.verify_tls', true),
         );
 
         $reconciler = new PortForwardReconciler(
