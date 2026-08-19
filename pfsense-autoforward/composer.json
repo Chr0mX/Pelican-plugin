@@ -1,0 +1,32 @@
+{
+    "name": "chr0mx/pfsense-autoforward",
+    "description": "Automatically creates and removes pfSense NAT port-forward + firewall pass rules to match Pelican server port allocations.",
+    "type": "pelican-plugin",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "filament/filament": "^4.0",
+        "orchestra/testbench": "^9.0",
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Chr0mX\\PfSenseAutoForward\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Chr0mX\\PfSenseAutoForward\\Tests\\": "tests/",
+            "App\\": "tests/Stubs/App/"
+        }
+    },
+    "scripts": {
+        "test": "phpunit"
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}

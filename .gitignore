@@ -1,6 +1,9 @@
 /valheim-mod-manager/vendor
 /valheim-mod-manager/.phpunit.cache
 /valheim-mod-manager/.phpunit.result.cache
+/pfsense-autoforward/vendor
+/pfsense-autoforward/.phpunit.cache
+/pfsense-autoforward/.phpunit.result.cache
 /.idea
 /.vscode
 .DS_Store

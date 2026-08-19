@@ -1,0 +1,63 @@
+<?php
+
+namespace Chr0mX\PfSenseAutoForward\Tests\Unit;
+
+use App\Models\Allocation;
+use App\Models\Egg;
+use App\Models\Server;
+use Chr0mX\PfSenseAutoForward\Services\AllocationRepository;
+use Chr0mX\PfSenseAutoForward\Tests\TestCase;
+
+class AllocationRepositoryTest extends TestCase
+{
+    public function test_maps_an_assigned_allocation_to_a_rule_using_its_real_bind_ip(): void
+    {
+        $allocation = new Allocation(
+            id: 7,
+            ip: '10.0.0.5',
+            port: 25565,
+            server_id: 3,
+            server: new Server(id: 3, uuid: 'aaaa', name: 'Survival'),
+        );
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation);
+
+        $this->assertNotNull($rule);
+        $this->assertSame(7, $rule->allocationId);
+        $this->assertSame('aaaa', $rule->serverUuid);
+        $this->assertSame('Survival', $rule->serverName);
+        $this->assertSame('10.0.0.5', $rule->targetIp);
+        $this->assertSame(25565, $rule->port);
+        $this->assertSame('tcp/udp', $rule->protocol);
+    }
+
+    public function test_unassigned_allocations_are_out_of_scope(): void
+    {
+        $allocation = new Allocation(id: 8, server_id: null, server: null);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation);
+
+        $this->assertNull($rule);
+    }
+
+    public function test_required_egg_tag_scopes_out_untagged_servers(): void
+    {
+        config()->set('pfsense-autoforward.required_egg_tag', 'internet-facing');
+
+        $tagged = new Allocation(
+            id: 1,
+            server_id: 1,
+            server: new Server(id: 1, egg: new Egg(tags: ['internet-facing'])),
+        );
+        $untagged = new Allocation(
+            id: 2,
+            server_id: 2,
+            server: new Server(id: 2, egg: new Egg(tags: ['vanilla'])),
+        );
+
+        $repository = new AllocationRepository();
+
+        $this->assertNotNull($repository->mapAllocation($tagged));
+        $this->assertNull($repository->mapAllocation($untagged));
+    }
+}
