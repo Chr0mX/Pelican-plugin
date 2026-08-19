@@ -2,6 +2,25 @@
 
 All notable changes to the pfSense Auto NAT/Port-Forward plugin are documented in this file.
 
+## [1.0.1] - 2026-08-19
+
+### Fixed
+- **A pfSense host with a self-signed certificate (the default for pfSense's webConfigurator/API cert) crashed the
+  entire reconciliation instead of failing gracefully.** `PfSenseApiClient` only caught HTTP-level failures
+  (`$response->failed()`) and wrapped those in `PfSenseApiException`; a TLS/DNS/timeout failure never reaches an HTTP
+  response at all - Laravel's HTTP client throws `Illuminate\Http\Client\ConnectionException` directly. That
+  exception wasn't caught anywhere, so it propagated all the way up through the reconciler and the queued job,
+  failing the scheduled `pfsense-autoforward:reconcile` command outright instead of recording a failed sync in the
+  admin status page. Connection-level failures are now caught and wrapped the same way as HTTP failures.
+
+### Added
+- **Verify TLS certificate** setting (`PFSENSEAF_VERIFY_TLS`, default `true`) - turn off for a pfSense box using a
+  self-signed certificate you already trust the identity of, instead of every sync failing outright.
+- **Allowed node IDs** setting (`PFSENSEAF_ALLOWED_NODE_IDS`) - comma-separated Pelican node IDs; only allocations on
+  one of these nodes are forwarded. Useful when only some nodes actually sit behind this pfSense (e.g. a colo node
+  vs. a home node behind a different router). Combines with **Required egg tag** using AND - both conditions must
+  match. Leave blank (the default) to allow every node, same as before this setting existed.
+
 ## [1.0.0] - 2026-08-19
 
 Initial release.

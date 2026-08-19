@@ -60,4 +60,57 @@ class AllocationRepositoryTest extends TestCase
         $this->assertNotNull($repository->mapAllocation($tagged));
         $this->assertNull($repository->mapAllocation($untagged));
     }
+
+    public function test_allowed_node_ids_scopes_out_other_nodes(): void
+    {
+        config()->set('pfsense-autoforward.allowed_node_ids', '1, 3');
+
+        $onAllowedNode = new Allocation(id: 1, node_id: 3, server_id: 1, server: new Server(id: 1));
+        $onOtherNode = new Allocation(id: 2, node_id: 2, server_id: 2, server: new Server(id: 2));
+
+        $repository = new AllocationRepository();
+
+        $this->assertNotNull($repository->mapAllocation($onAllowedNode));
+        $this->assertNull($repository->mapAllocation($onOtherNode));
+    }
+
+    public function test_blank_allowed_node_ids_allows_every_node(): void
+    {
+        config()->set('pfsense-autoforward.allowed_node_ids', null);
+
+        $allocation = new Allocation(id: 1, node_id: 99, server_id: 1, server: new Server(id: 1));
+
+        $this->assertNotNull((new AllocationRepository())->mapAllocation($allocation));
+    }
+
+    public function test_required_egg_tag_and_allowed_node_ids_combine_with_and(): void
+    {
+        config()->set('pfsense-autoforward.required_egg_tag', 'internet-facing');
+        config()->set('pfsense-autoforward.allowed_node_ids', '1');
+
+        $matchesBoth = new Allocation(
+            id: 1,
+            node_id: 1,
+            server_id: 1,
+            server: new Server(id: 1, egg: new Egg(tags: ['internet-facing'])),
+        );
+        $wrongNodeOnly = new Allocation(
+            id: 2,
+            node_id: 2,
+            server_id: 2,
+            server: new Server(id: 2, egg: new Egg(tags: ['internet-facing'])),
+        );
+        $wrongTagOnly = new Allocation(
+            id: 3,
+            node_id: 1,
+            server_id: 3,
+            server: new Server(id: 3, egg: new Egg(tags: ['vanilla'])),
+        );
+
+        $repository = new AllocationRepository();
+
+        $this->assertNotNull($repository->mapAllocation($matchesBoth));
+        $this->assertNull($repository->mapAllocation($wrongNodeOnly));
+        $this->assertNull($repository->mapAllocation($wrongTagOnly));
+    }
 }

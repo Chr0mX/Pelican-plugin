@@ -29,8 +29,10 @@ class PfSenseAutoForwardPluginTest extends TestCase
         config()->set('pfsense-autoforward.pfsense_url', 'https://pfsense.example.test');
         config()->set('pfsense-autoforward.pfsense_api_key', 'secret-key');
         config()->set('pfsense-autoforward.pfsense_interface', 'wan');
+        config()->set('pfsense-autoforward.verify_tls', false);
         config()->set('pfsense-autoforward.default_protocol', 'tcp/udp');
         config()->set('pfsense-autoforward.required_egg_tag', 'internet-facing');
+        config()->set('pfsense-autoforward.allowed_node_ids', '1,3');
         config()->set('pfsense-autoforward.reconcile_interval_minutes', 5);
         config()->set('pfsense-autoforward.dry_run', false);
         config()->set('pfsense-autoforward.request_timeout', 15);
@@ -42,8 +44,10 @@ class PfSenseAutoForwardPluginTest extends TestCase
             'pfsense_url' => 'https://pfsense.example.test',
             'pfsense_api_key' => 'secret-key',
             'pfsense_interface' => 'wan',
+            'verify_tls' => false,
             'default_protocol' => 'tcp/udp',
             'required_egg_tag' => 'internet-facing',
+            'allowed_node_ids' => '1,3',
             'reconcile_interval_minutes' => 5,
             'dry_run' => false,
             'request_timeout' => 15,

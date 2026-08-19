@@ -10,6 +10,13 @@ return [
     'pfsense_api_key' => env('PFSENSEAF_API_KEY'),
     'pfsense_interface' => env('PFSENSEAF_INTERFACE', 'wan'),
 
+    // pfSense's default webConfigurator/API certificate is self-signed
+    // unless you've installed a trusted one - leave this on and every
+    // request fails with a TLS handshake error. Turn it off only for a
+    // pfSense box you already trust the identity of (e.g. reached over a
+    // private/management network).
+    'verify_tls' => (bool) env('PFSENSEAF_VERIFY_TLS', true),
+
     /*
     |--------------------------------------------------------------------
     | Rule contents
@@ -43,6 +50,14 @@ return [
     |
     */
     'required_egg_tag' => env('PFSENSEAF_REQUIRED_EGG_TAG'),
+
+    /*
+    | Only allocations on one of these Pelican node ids are forwarded -
+    | useful when only some nodes actually sit behind this pfSense (e.g. a
+    | colo node vs. a home node behind a different router). Comma-separated,
+    | e.g. "1,3". Leave null to forward allocations on every node.
+    */
+    'allowed_node_ids' => env('PFSENSEAF_ALLOWED_NODE_IDS'),
 
     /*
     |--------------------------------------------------------------------
