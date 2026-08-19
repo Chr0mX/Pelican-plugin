@@ -15,6 +15,7 @@ final readonly class PortForwardRule
         public int $allocationId,
         public string $serverUuid,
         public string $serverName,
+        public string $nodeName,
         public string $targetIp,
         public int $port,
         public string $protocol,
@@ -31,5 +32,14 @@ final readonly class PortForwardRule
     public function descrTag(): string
     {
         return "pelican:{$this->serverUuid}:{$this->allocationId}";
+    }
+
+    /**
+     * Human-readable "<node> | <server> | <port>/<protocol>" line for the
+     * admin status page - shows what's actually mapped, not just a count.
+     */
+    public function describe(): string
+    {
+        return "{$this->nodeName} | {$this->serverName} | {$this->port}/{$this->protocol}";
     }
 }

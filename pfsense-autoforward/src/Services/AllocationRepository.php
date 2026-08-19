@@ -23,7 +23,7 @@ class AllocationRepository
     {
         return Allocation::query()
             ->whereNotNull('server_id')
-            ->with(['server.egg'])
+            ->with(['server.egg', 'node'])
             ->get()
             ->map(fn (Allocation $allocation) => $this->mapAllocation($allocation))
             ->filter()
@@ -44,6 +44,7 @@ class AllocationRepository
             allocationId: $allocation->id,
             serverUuid: $allocation->server->uuid,
             serverName: $allocation->server->name,
+            nodeName: $allocation->node->name ?? "Node #{$allocation->node_id}",
             // The real bind IP for this allocation, not the alias: the
             // alias is what's shown to players, but NAT needs to target
             // wherever Wings actually listens on this node.

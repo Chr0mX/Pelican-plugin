@@ -4,6 +4,7 @@ namespace Chr0mX\PfSenseAutoForward\Tests\Unit;
 
 use App\Models\Allocation;
 use App\Models\Egg;
+use App\Models\Node;
 use App\Models\Server;
 use Chr0mX\PfSenseAutoForward\Services\AllocationRepository;
 use Chr0mX\PfSenseAutoForward\Tests\TestCase;
@@ -14,10 +15,12 @@ class AllocationRepositoryTest extends TestCase
     {
         $allocation = new Allocation(
             id: 7,
+            node_id: 2,
             ip: '10.0.0.5',
             port: 25565,
             server_id: 3,
             server: new Server(id: 3, uuid: 'aaaa', name: 'Survival'),
+            node: new Node(id: 2, name: 'Frankfurt'),
         );
 
         $rule = (new AllocationRepository())->mapAllocation($allocation);
@@ -26,9 +29,20 @@ class AllocationRepositoryTest extends TestCase
         $this->assertSame(7, $rule->allocationId);
         $this->assertSame('aaaa', $rule->serverUuid);
         $this->assertSame('Survival', $rule->serverName);
+        $this->assertSame('Frankfurt', $rule->nodeName);
         $this->assertSame('10.0.0.5', $rule->targetIp);
         $this->assertSame(25565, $rule->port);
         $this->assertSame('tcp/udp', $rule->protocol);
+        $this->assertSame('Frankfurt | Survival | 25565/tcp/udp', $rule->describe());
+    }
+
+    public function test_falls_back_to_a_node_id_label_when_the_node_relation_is_missing(): void
+    {
+        $allocation = new Allocation(id: 9, node_id: 4, server_id: 1, server: new Server(id: 1), node: null);
+
+        $rule = (new AllocationRepository())->mapAllocation($allocation);
+
+        $this->assertSame('Node #4', $rule->nodeName);
     }
 
     public function test_unassigned_allocations_are_out_of_scope(): void
