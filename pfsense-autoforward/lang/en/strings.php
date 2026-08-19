@@ -24,6 +24,10 @@ return [
             'failed' => ':count failed',
         ],
         'dry_run_badge' => 'Dry run - no changes are being applied',
+        'mapped_heading' => 'Currently mapped',
+        'mapped_description' => 'Node | Server | Port opened',
+        'removed_heading' => 'Removed this run',
+        'errors_heading' => 'Errors',
     ],
 
     'actions' => [

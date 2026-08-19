@@ -2,6 +2,17 @@
 
 All notable changes to the pfSense Auto NAT/Port-Forward plugin are documented in this file.
 
+## [1.0.2] - 2026-08-19
+
+### Added
+- **The admin status page now shows what's actually mapped, not just counts.** Requested after the counts-only
+  summary ("6 rule(s) created · 0 removed · 0 already in sync") left no way to see *which* ports were opened. Three
+  new sections: "Currently mapped" lists every allocation now forwarded as `<node> | <server> | <port>/<protocol>`
+  (covers both this run's creations and everything already in sync); "Removed this run" lists orphaned rules that
+  were cleaned up; "Errors" surfaces any per-rule failures, previously logged but never shown on the page.
+- `PortForwardRule` gained a `nodeName` field (from `Allocation::$node_id` via the `node` relation) and a
+  `describe()` method producing that display line.
+
 ## [1.0.1] - 2026-08-19
 
 ### Fixed

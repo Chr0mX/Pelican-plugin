@@ -63,6 +63,10 @@ class PfSenseForwardingPage extends Page
     public function content(Schema $schema): Schema
     {
         $status = ReconciliationStatus::get();
+        $summary = $status['summary'];
+        $mappedLines = $summary['mapped_lines'] ?? [];
+        $removedLines = $summary['removed_lines'] ?? [];
+        $errors = $summary['errors'] ?? [];
 
         return $schema->components([
             Section::make()
@@ -84,9 +88,39 @@ class PfSenseForwardingPage extends Page
                             : trans('pfsense-autoforward::strings.page.never_run')),
                     TextEntry::make('summary')
                         ->hiddenLabel()
-                        ->state($this->summaryLine($status['summary']))
-                        ->visible($status['summary'] !== null),
+                        ->state($this->summaryLine($summary))
+                        ->visible($summary !== null),
                 ]),
+            Section::make(trans('pfsense-autoforward::strings.page.mapped_heading'))
+                ->description(trans('pfsense-autoforward::strings.page.mapped_description'))
+                ->schema([
+                    TextEntry::make('mapped_lines')
+                        ->hiddenLabel()
+                        ->state($mappedLines)
+                        ->listWithLineBreaks()
+                        ->bulleted(),
+                ])
+                ->visible($mappedLines !== []),
+            Section::make(trans('pfsense-autoforward::strings.page.removed_heading'))
+                ->schema([
+                    TextEntry::make('removed_lines')
+                        ->hiddenLabel()
+                        ->state($removedLines)
+                        ->listWithLineBreaks()
+                        ->bulleted()
+                        ->color('warning'),
+                ])
+                ->visible($removedLines !== []),
+            Section::make(trans('pfsense-autoforward::strings.page.errors_heading'))
+                ->schema([
+                    TextEntry::make('errors')
+                        ->hiddenLabel()
+                        ->state($errors)
+                        ->listWithLineBreaks()
+                        ->bulleted()
+                        ->color('danger'),
+                ])
+                ->visible($errors !== []),
         ]);
     }
 

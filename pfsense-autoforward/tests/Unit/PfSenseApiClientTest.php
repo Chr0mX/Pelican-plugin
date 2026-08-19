@@ -26,6 +26,7 @@ class PfSenseApiClientTest extends TestCase
             allocationId: 1,
             serverUuid: 'aaaa',
             serverName: 'Survival',
+            nodeName: 'Node 1',
             targetIp: '10.0.0.5',
             port: 25565,
             protocol: 'tcp/udp',

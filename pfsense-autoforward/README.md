@@ -97,7 +97,9 @@ installed a real one) - turning it off is what makes syncing against a typical L
 - **Dry run mode** - see exactly what would be created/removed, logged and shown on the admin page, without ever
   calling the pfSense API.
 - **Admin status page** - last reconciliation outcome (created/removed/unchanged/failed), last-run time, dry-run
-  indicator, and a "Sync Now" action. Polls itself so a queued sync's result appears without a manual refresh.
+  indicator, and a "Sync Now" action. Shows exactly what's mapped - a "Currently mapped" list of every forwarded
+  allocation as `<node> | <server> | <port>/<protocol>`, a "Removed this run" list of cleaned-up orphaned rules, and
+  any per-rule errors. Polls itself so a queued sync's result appears without a manual refresh.
 - **Background jobs** - reconciliation runs as a queued job (the connection's default queue - deliberately *not* a
   named queue, since Pelican's official Docker image starts its worker as `queue:work --tries=3` with no `--queue=`
   flag and would otherwise never pick it up) so "Sync Now" never blocks the request. The scheduled run executes

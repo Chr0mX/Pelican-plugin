@@ -46,6 +46,7 @@ class PortForwardReconciler
         $unchanged = 0;
         $failed = 0;
         $errors = [];
+        $mappedLines = [];
         $applyNeeded = false;
 
         foreach ($expected as $tag => $rule) {
@@ -54,12 +55,14 @@ class PortForwardReconciler
 
             if (! $needsNat && ! $needsPass) {
                 $unchanged++;
+                $mappedLines[] = $rule->describe();
 
                 continue;
             }
 
             if ($this->dryRun) {
                 $created += ($needsNat ? 1 : 0) + ($needsPass ? 1 : 0);
+                $mappedLines[] = $rule->describe();
 
                 continue;
             }
@@ -69,9 +72,17 @@ class PortForwardReconciler
             $failed += $madeFailed;
             $errors = [...$errors, ...$ruleErrors];
             $applyNeeded = $applyNeeded || $didApply;
+
+            // Only counts as "currently mapped" if nothing about it failed -
+            // a rule with a failed half (NAT created but pass rule create
+            // errored, say) isn't fully forwarded yet, and the errors list
+            // above already explains why.
+            if ($madeFailed === 0) {
+                $mappedLines[] = $rule->describe();
+            }
         }
 
-        [$removed, $removeFailed, $removeErrors, $didApply] = $this->removeOrphans($existingNat, $existingPass, $expected);
+        [$removed, $removeFailed, $removeErrors, $didApply, $removedLines] = $this->removeOrphans($existingNat, $existingPass, $expected);
         $failed += $removeFailed;
         $errors = [...$errors, ...$removeErrors];
         $applyNeeded = $applyNeeded || $didApply;
@@ -91,6 +102,8 @@ class PortForwardReconciler
             unchanged: $unchanged,
             failed: $failed,
             dryRun: $this->dryRun,
+            mappedLines: $mappedLines,
+            removedLines: $removedLines,
             errors: $errors,
         );
     }
@@ -134,7 +147,7 @@ class PortForwardReconciler
      * @param  array<string, true>  $existingNat
      * @param  array<string, true>  $existingPass
      * @param  Collection<string, PortForwardRule>  $expected
-     * @return array{0: int, 1: int, 2: string[], 3: bool}
+     * @return array{0: int, 1: int, 2: string[], 3: bool, 4: string[]}
      */
     private function removeOrphans(array $existingNat, array $existingPass, Collection $expected): array
     {
@@ -142,6 +155,7 @@ class PortForwardReconciler
         $failed = 0;
         $errors = [];
         $applied = false;
+        $removedTags = [];
 
         foreach (array_keys($existingNat) as $tag) {
             if (! $this->isOrphaned($tag, $expected)) {
@@ -150,6 +164,7 @@ class PortForwardReconciler
 
             if ($this->dryRun) {
                 $removed++;
+                $removedTags[$tag] = true;
 
                 continue;
             }
@@ -158,6 +173,7 @@ class PortForwardReconciler
                 $this->client->deletePortForwardRule($tag);
                 $removed++;
                 $applied = true;
+                $removedTags[$tag] = true;
             } catch (PfSenseApiException $e) {
                 $failed++;
                 $errors[] = "Delete NAT rule failed for {$tag}: {$e->getMessage()}";
@@ -171,6 +187,7 @@ class PortForwardReconciler
 
             if ($this->dryRun) {
                 $removed++;
+                $removedTags[$tag] = true;
 
                 continue;
             }
@@ -179,13 +196,19 @@ class PortForwardReconciler
                 $this->client->deletePassRule($tag);
                 $removed++;
                 $applied = true;
+                $removedTags[$tag] = true;
             } catch (PfSenseApiException $e) {
                 $failed++;
                 $errors[] = "Delete pass rule failed for {$tag}: {$e->getMessage()}";
             }
         }
 
-        return [$removed, $failed, $errors, $applied];
+        $removedLines = array_map(
+            fn (string $tag) => $this->describeOrphan($tag),
+            array_keys($removedTags),
+        );
+
+        return [$removed, $failed, $errors, $applied, $removedLines];
     }
 
     /**
@@ -194,6 +217,26 @@ class PortForwardReconciler
     private function isOrphaned(string $tag, Collection $expected): bool
     {
         return str_starts_with($tag, self::MANAGED_PREFIX) && ! $expected->has($tag);
+    }
+
+    /**
+     * A removed rule's Pelican allocation is often already gone by the time
+     * it's noticed as orphaned, so there's no PortForwardRule (and no node/
+     * port) to describe it with - only the tag pfSense still has. Parses it
+     * back ("pelican:<server_uuid>:<allocation_id>") into something readable
+     * instead of showing the raw tag.
+     */
+    private function describeOrphan(string $tag): string
+    {
+        $parts = explode(':', $tag, 3);
+
+        if (count($parts) !== 3) {
+            return $tag;
+        }
+
+        [, $serverUuid, $allocationId] = $parts;
+
+        return "Server {$serverUuid} | allocation #{$allocationId} - no longer assigned, rule removed";
     }
 
     /**

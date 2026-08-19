@@ -19,5 +19,6 @@ class Allocation
         public ?int $server_id = null,
         public ?string $ip_alias = null,
         public ?Server $server = null,
+        public ?Node $node = null,
     ) {}
 }
