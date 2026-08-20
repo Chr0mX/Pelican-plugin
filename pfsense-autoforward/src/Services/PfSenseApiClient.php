@@ -155,10 +155,19 @@ class PfSenseApiClient
      * DELETE - the operation this client relies on for safe removal - so a
      * single explicit apply() after a batch is used uniformly for both
      * creates and deletes instead.)
+     *
+     * Sends `async: false` so pfSense reloads the ruleset synchronously
+     * (`filter_configure_sync()`) before this call returns, rather than
+     * merely scheduling a deferred reload (`filter_configure()`, the
+     * default for this endpoint) that can sit pending for a while - the
+     * cause of changes appearing to "work eventually, but slowly."
+     * Blocking here is fine: this always runs inside the already-
+     * background ReconcilePortForwardsJob, never in a request a user is
+     * waiting on directly.
      */
     public function apply(): void
     {
-        $this->request('POST', self::APPLY_ENDPOINT);
+        $this->request('POST', self::APPLY_ENDPOINT, ['async' => false]);
     }
 
     /**

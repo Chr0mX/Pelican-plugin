@@ -151,6 +151,23 @@ class PfSenseApiClientTest extends TestCase
         });
     }
 
+    public function test_apply_requests_a_synchronous_reload(): void
+    {
+        // async defaults to true on pfSense's side, which only *schedules*
+        // a deferred filter_configure() reload rather than running
+        // filter_configure_sync() immediately - the cause of changes
+        // appearing to apply "eventually, but slowly."
+        Http::fake(['pfsense.example.test/*' => Http::response(['data' => []])]);
+
+        $this->client()->apply();
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'POST'
+                && str_ends_with(explode('?', $request->url())[0], '/api/v2/firewall/apply')
+                && $request['async'] === false;
+        });
+    }
+
     public function test_throws_on_a_failed_request(): void
     {
         Http::fake(['pfsense.example.test/*' => Http::response(['message' => 'nope'], 422)]);
