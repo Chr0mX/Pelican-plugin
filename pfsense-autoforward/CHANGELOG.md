@@ -28,6 +28,15 @@ All notable changes to the pfSense Auto NAT/Port-Forward plugin are documented i
   orphaned ones.
 - Admin page summary line gains a "N enable/disable synced" segment alongside created/removed/unchanged/failed.
 
+### Fixed
+- **Failed pfSense API requests logged with no explanation.** `PfSenseApiException` always captured the HTTP status
+  and response body, but nothing ever surfaced them - the logged error was just `pfSense API request failed: POST
+  /api/v2/firewall/nat/port_forward`, with no way to tell *why* pfSense rejected it (wrong API key, REST API in
+  read-only mode, a rejected field value, etc.) without separately inspecting pfSense itself. The exception message
+  now includes the status and, when pfSense returns its usual JSON error envelope, its own `response_id`/`message`
+  (e.g. `... (405 ENDPOINT_METHOD_NOT_ALLOWED_IN_READ_ONLY_MODE: This endpoint is not allowed while the REST API is
+  in read-only mode.)`) - falling back to a truncated raw body for a non-JSON response.
+
 ## [1.0.2] - 2026-08-19
 
 ### Added

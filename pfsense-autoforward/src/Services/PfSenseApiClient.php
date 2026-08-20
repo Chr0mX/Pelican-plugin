@@ -5,7 +5,9 @@ namespace Chr0mX\PfSenseAutoForward\Services;
 use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
 use Chr0mX\PfSenseAutoForward\Exceptions\PfSenseApiException;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * Thin client for pfSense-pkg-RESTAPI v2 (https://pfrest.org). Endpoint
@@ -192,12 +194,31 @@ class PfSenseApiClient
 
         if ($response->failed()) {
             throw new PfSenseApiException(
-                "pfSense API request failed: $method $path",
+                "pfSense API request failed: $method $path ({$response->status()} {$this->describeFailure($response)})",
                 $response->status(),
                 $response->body(),
             );
         }
 
         return $response->json() ?? [];
+    }
+
+    /**
+     * pfSense-pkg-RESTAPI's error envelope is
+     * {"code":..., "status":"error", "response_id":"SOME_ERROR_ID", "message":"...", "data": ...} -
+     * pull the parts that actually explain what went wrong (e.g. a
+     * disallowed method in read-only mode, an invalid field value, an
+     * unauthorized API key) instead of just logging a bare status code.
+     * Falls back to a truncated raw body for a non-JSON/unexpected shape.
+     */
+    private function describeFailure(Response $response): string
+    {
+        $decoded = $response->json();
+
+        if (is_array($decoded) && (isset($decoded['response_id']) || isset($decoded['message']))) {
+            return trim(($decoded['response_id'] ?? '') . ': ' . ($decoded['message'] ?? ''), ': ');
+        }
+
+        return Str::limit($response->body(), 200);
     }
 }

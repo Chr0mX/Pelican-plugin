@@ -160,6 +160,44 @@ class PfSenseApiClientTest extends TestCase
         $this->client()->listPortForwardRules();
     }
 
+    public function test_failed_request_message_includes_pfsenses_own_error_details(): void
+    {
+        // pfSense-pkg-RESTAPI's error envelope: {"response_id": "...", "message": "..."}.
+        // Previously the exception message was just "pfSense API request
+        // failed: METHOD /path" - status and pfSense's own explanation were
+        // captured on the exception object but never actually surfaced
+        // anywhere a log line could show them.
+        Http::fake(['pfsense.example.test/*' => Http::response([
+            'code' => 405,
+            'status' => 'error',
+            'response_id' => 'ENDPOINT_METHOD_NOT_ALLOWED_IN_READ_ONLY_MODE',
+            'message' => 'This endpoint is not allowed while the REST API is in read-only mode.',
+        ], 405)]);
+
+        try {
+            $this->client()->createPortForward($this->rule());
+            $this->fail('Expected a PfSenseApiException.');
+        } catch (PfSenseApiException $e) {
+            $this->assertSame(405, $e->status);
+            $this->assertStringContainsString('405', $e->getMessage());
+            $this->assertStringContainsString('ENDPOINT_METHOD_NOT_ALLOWED_IN_READ_ONLY_MODE', $e->getMessage());
+            $this->assertStringContainsString('read-only mode', $e->getMessage());
+        }
+    }
+
+    public function test_failed_request_falls_back_to_a_truncated_body_for_a_non_json_response(): void
+    {
+        Http::fake(['pfsense.example.test/*' => Http::response('<html>502 Bad Gateway</html>', 502)]);
+
+        try {
+            $this->client()->listPortForwardRules();
+            $this->fail('Expected a PfSenseApiException.');
+        } catch (PfSenseApiException $e) {
+            $this->assertStringContainsString('502', $e->getMessage());
+            $this->assertStringContainsString('Bad Gateway', $e->getMessage());
+        }
+    }
+
     public function test_wraps_a_connection_failure_as_a_pfsense_api_exception(): void
     {
         // Simulates what actually happens against a pfSense box with a
