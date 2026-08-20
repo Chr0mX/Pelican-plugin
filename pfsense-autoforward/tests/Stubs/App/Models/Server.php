@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ContainerStatus;
+
 /**
  * Minimal stand-in for the real Pelican Server model. Never shipped with
  * the plugin - used for unit tests only so services that type-hint
@@ -14,6 +16,7 @@ class Server
         public string $uuid = '11111111-1111-1111-1111-111111111111',
         public string $name = 'Test Server',
         public ?Egg $egg = null,
+        public ContainerStatus $status = ContainerStatus::Running,
     ) {
         $this->egg ??= new Egg();
     }
@@ -21,5 +24,10 @@ class Server
     public function loadMissing(string $relation): static
     {
         return $this;
+    }
+
+    public function retrieveStatus(): ContainerStatus
+    {
+        return $this->status;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Chr0mX\PfSenseAutoForward\Services;
 
+use Chr0mX\PfSenseAutoForward\DTO\MappedPortRow;
 use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
 use Chr0mX\PfSenseAutoForward\DTO\ReconciliationSummary;
 use Chr0mX\PfSenseAutoForward\Exceptions\PfSenseApiException;
@@ -10,10 +11,11 @@ use Illuminate\Support\Collection;
 /**
  * Diffs the allocations Pelican currently expects to be forwarded against
  * the rules pfSense actually has tagged as ours, then creates what's
- * missing and removes what's stale. Run on a schedule and on demand via
- * "Sync Now" - there's no event to hook, and reconciling from scratch every
- * time is also exactly what makes pre-existing, manually-created
- * allocations get picked up automatically the first time this runs.
+ * missing, syncs what's changed (enabled/disabled, protocol), and removes
+ * what's stale. Run on a schedule and on demand via "Sync Now" - there's no
+ * event to hook, and reconciling from scratch every time is also exactly
+ * what makes pre-existing, manually-created allocations get picked up
+ * automatically the first time this runs.
  */
 class PortForwardReconciler
 {
@@ -43,26 +45,41 @@ class PortForwardReconciler
         }
 
         $created = 0;
+        $toggled = 0;
         $unchanged = 0;
         $failed = 0;
         $errors = [];
-        $mappedLines = [];
+        $mappedRows = [];
         $applyNeeded = false;
 
         foreach ($expected as $tag => $rule) {
-            $needsNat = ! isset($existingNat[$tag]);
-            $needsPass = ! isset($existingPass[$tag]);
+            $natEntry = $existingNat[$tag] ?? null;
+            $passEntry = $existingPass[$tag] ?? null;
 
-            if (! $needsNat && ! $needsPass) {
-                $unchanged++;
-                $mappedLines[] = $rule->describe();
+            if ($natEntry !== null && $passEntry !== null) {
+                // Both already exist - the id captured just above is still
+                // valid here since nothing has been created or deleted yet
+                // this pass (see PfSenseApiClient::updatePortForwardRule()).
+                [$didToggle, $syncFailed, $syncErrors, $didApply] = $this->syncExisting($rule, $tag, $natEntry, $passEntry);
+                $toggled += $didToggle;
+                $failed += $syncFailed;
+                $errors = [...$errors, ...$syncErrors];
+                $applyNeeded = $applyNeeded || $didApply;
+
+                if ($syncFailed === 0) {
+                    $unchanged += $didToggle === 0 ? 1 : 0;
+                    $mappedRows[] = MappedPortRow::fromRule($rule, $rule->enabled)->toArray();
+                }
 
                 continue;
             }
 
+            $needsNat = $natEntry === null;
+            $needsPass = $passEntry === null;
+
             if ($this->dryRun) {
                 $created += ($needsNat ? 1 : 0) + ($needsPass ? 1 : 0);
-                $mappedLines[] = $rule->describe();
+                $mappedRows[] = MappedPortRow::fromRule($rule, $rule->enabled)->toArray();
 
                 continue;
             }
@@ -78,7 +95,7 @@ class PortForwardReconciler
             // errored, say) isn't fully forwarded yet, and the errors list
             // above already explains why.
             if ($madeFailed === 0) {
-                $mappedLines[] = $rule->describe();
+                $mappedRows[] = MappedPortRow::fromRule($rule, $rule->enabled)->toArray();
             }
         }
 
@@ -99,10 +116,11 @@ class PortForwardReconciler
         return new ReconciliationSummary(
             created: $created,
             removed: $removed,
+            toggled: $toggled,
             unchanged: $unchanged,
             failed: $failed,
             dryRun: $this->dryRun,
-            mappedLines: $mappedLines,
+            mappedRows: $mappedRows,
             removedLines: $removedLines,
             errors: $errors,
         );
@@ -144,8 +162,65 @@ class PortForwardReconciler
     }
 
     /**
-     * @param  array<string, true>  $existingNat
-     * @param  array<string, true>  $existingPass
+     * Brings an already-existing NAT+pass pair in line with the rule's
+     * currently-desired enabled state and protocol (server started/
+     * stopped since last run, or an admin changed a manual override).
+     * Sends both fields together whenever either differs, rather than
+     * tracking them separately - simpler, and the unchanged field is just
+     * re-sent as its current value.
+     *
+     * @param  array{id: int|string, disabled: bool, protocol: string}  $natEntry
+     * @param  array{id: int|string, disabled: bool, protocol: string}  $passEntry
+     * @return array{0: int, 1: int, 2: string[], 3: bool}
+     */
+    private function syncExisting(PortForwardRule $rule, string $tag, array $natEntry, array $passEntry): array
+    {
+        $toggled = 0;
+        $failed = 0;
+        $errors = [];
+        $applied = false;
+
+        $desiredDisabled = ! $rule->enabled;
+
+        $natMismatch = $natEntry['disabled'] !== $desiredDisabled || $natEntry['protocol'] !== $rule->protocol;
+        $passMismatch = $passEntry['disabled'] !== $desiredDisabled || $passEntry['protocol'] !== $rule->protocol;
+
+        if ($natMismatch) {
+            if ($this->dryRun) {
+                $toggled++;
+            } else {
+                try {
+                    $this->client->updatePortForwardRule($natEntry['id'], $desiredDisabled, $rule->protocol);
+                    $toggled++;
+                    $applied = true;
+                } catch (PfSenseApiException $e) {
+                    $failed++;
+                    $errors[] = "Update NAT rule failed for {$tag}: {$e->getMessage()}";
+                }
+            }
+        }
+
+        if ($passMismatch) {
+            if ($this->dryRun) {
+                $toggled++;
+            } else {
+                try {
+                    $this->client->updatePassRule($passEntry['id'], $desiredDisabled, $rule->protocol);
+                    $toggled++;
+                    $applied = true;
+                } catch (PfSenseApiException $e) {
+                    $failed++;
+                    $errors[] = "Update pass rule failed for {$tag}: {$e->getMessage()}";
+                }
+            }
+        }
+
+        return [$toggled, $failed, $errors, $applied];
+    }
+
+    /**
+     * @param  array<string, array{id: int|string, disabled: bool, protocol: string}>  $existingNat
+     * @param  array<string, array{id: int|string, disabled: bool, protocol: string}>  $existingPass
      * @param  Collection<string, PortForwardRule>  $expected
      * @return array{0: int, 1: int, 2: string[], 3: bool, 4: string[]}
      */
@@ -240,12 +315,15 @@ class PortForwardReconciler
     }
 
     /**
-     * Indexes by `descr` alone - deletion goes through PfSenseApiClient's
-     * query-filtered plural-endpoint DELETE (by descr), not by pfSense's
-     * own numeric object id, so the id doesn't need to be tracked here.
+     * Indexes by `descr`, keeping the fields needed to detect drift
+     * (disabled/protocol) and to PATCH by id - deletion still goes through
+     * PfSenseApiClient's query-filtered plural-endpoint DELETE (by descr),
+     * but there's no equivalent for PATCH (the plural endpoints only
+     * support GET/PUT/DELETE), so updates need the id from this same
+     * initial listing.
      *
      * @param  array<int, array<string, mixed>>  $rules
-     * @return array<string, true>
+     * @return array<string, array{id: int|string, disabled: bool, protocol: string}>
      */
     private function indexByDescr(array $rules): array
     {
@@ -254,11 +332,15 @@ class PortForwardReconciler
         foreach ($rules as $entry) {
             $descr = $entry['descr'] ?? null;
 
-            if (! is_string($descr) || $descr === '') {
+            if (! is_string($descr) || $descr === '' || ! isset($entry['id'])) {
                 continue;
             }
 
-            $indexed[$descr] = true;
+            $indexed[$descr] = [
+                'id' => $entry['id'],
+                'disabled' => (bool) ($entry['disabled'] ?? false),
+                'protocol' => (string) ($entry['protocol'] ?? ''),
+            ];
         }
 
         return $indexed;

@@ -49,7 +49,7 @@ This plugin shares a GitHub repo with the Valheim Mod Manager plugin, so its rel
 1. Bump `version` in `plugin.json`.
 2. Update `update.json`'s `version` and `download_url` to match the new tag.
 3. From inside this `pfsense-autoforward/` folder, build a zip whose root contains `plugin.json` directly (no
-   wrapping folder) - `config/`, `lang/`, `src/`, `README.md`, `LICENSE`, but not `composer.json/.lock`,
+   wrapping folder) - `config/`, `database/`, `lang/`, `src/`, `README.md`, `LICENSE`, but not `composer.json/.lock`,
    `phpunit.xml`, `tests/` or `vendor/`.
 4. Publish a GitHub Release tagged `pfsense-autoforward-X.Y.Z`, with that zip attached and named exactly
    `pfsense-autoforward.zip`.
@@ -65,6 +65,7 @@ Available from the plugin list in the admin panel (this is where Pelican surface
 | pfSense interface           | `PFSENSEAF_INTERFACE`                       | `wan`     |
 | Verify TLS certificate      | `PFSENSEAF_VERIFY_TLS`                      | `true`    |
 | Default protocol            | `PFSENSEAF_DEFAULT_PROTOCOL`                | `tcp/udp` |
+| Disable rule when server is stopped | `PFSENSEAF_DISABLE_WHEN_OFFLINE`    | `true`    |
 | Required egg tag            | `PFSENSEAF_REQUIRED_EGG_TAG`                | -         |
 | Allowed node IDs            | `PFSENSEAF_ALLOWED_NODE_IDS`                | -         |
 | Reconcile interval (minutes)| `PFSENSEAF_RECONCILE_INTERVAL_MINUTES`      | `5`       |
@@ -96,10 +97,21 @@ installed a real one) - turning it off is what makes syncing against a typical L
   IPs.
 - **Dry run mode** - see exactly what would be created/removed, logged and shown on the admin page, without ever
   calling the pfSense API.
-- **Admin status page** - last reconciliation outcome (created/removed/unchanged/failed), last-run time, dry-run
-  indicator, and a "Sync Now" action. Shows exactly what's mapped - a "Currently mapped" list of every forwarded
-  allocation as `<node> | <server> | <port>/<protocol>`, a "Removed this run" list of cleaned-up orphaned rules, and
-  any per-rule errors. Polls itself so a queued sync's result appears without a manual refresh.
+- **Follows the server's power state.** A mapped rule is only enabled while its server is actually running (read live
+  via `Server::retrieveStatus()`, the same call/cache the panel's own console uses) - a stopped server's rule is
+  *disabled*, not removed, so it comes back the instant the server starts again with no re-create needed. If Wings
+  can't be reached, the rule is left as-is rather than guessed at. Turn off with **Disable rule when server is
+  stopped** to go back to "always enabled" behaviour.
+- **Admin status page with an editable "Currently mapped" table** - Node, Server, Port, Forward type, Server status,
+  Rule status, one row per forwarded allocation. From that table:
+  - Toggle a rule **enabled/disabled** regardless of the automatic server-state behaviour above.
+  - Change one allocation's **forward type** (All/TCP/UDP) independent of the plugin-wide default protocol.
+  - **Reset to automatic** to clear both overrides for that allocation.
+
+  Overrides persist immediately and queue a sync so pfSense reflects the change right away. The page also shows the
+  last reconciliation outcome (created/removed/toggled/unchanged/failed), last-run time, a dry-run indicator, a
+  "Removed this run" list, any per-rule errors, and a "Sync Now" action - polling itself so a queued sync's result
+  appears without a manual refresh.
 - **Background jobs** - reconciliation runs as a queued job (the connection's default queue - deliberately *not* a
   named queue, since Pelican's official Docker image starts its worker as `queue:work --tries=3` with no `--queue=`
   flag and would otherwise never pick it up) so "Sync Now" never blocks the request. The scheduled run executes
@@ -107,13 +119,14 @@ installed a real one) - turning it off is what makes syncing against a typical L
 - **Plugin settings page** (`HasPluginSettings`, including `getSettingsFormData()`) - everything above is configurable
   without touching `.env` by hand.
 
-## Scope of v1
+## Scope
 
 - **Single port per allocation, not ranges.** `App\Models\Allocation` is fundamentally one IP+port per row, so this
   plugin mirrors that: one NAT rule + one pass rule per assigned allocation. Port-range forwarding isn't modeled.
-- **One protocol setting for everything.** Pelican doesn't track a protocol per allocation or per egg - games decide
-  that at the application level, not the panel - so there's a single `default_protocol` setting (default `tcp/udp`)
-  applied to every rule this plugin creates, rather than a per-egg override.
+- **One protocol per allocation.** Pelican itself doesn't track a protocol per allocation or per egg - games decide
+  that at the application level, not the panel - so protocol comes from the plugin-wide `default_protocol` setting
+  unless overridden per allocation from the admin page's "Currently mapped" table (stored in the plugin's own
+  `pfsense_autoforward_overrides` table, not in Pelican's data).
 
 ## Architecture
 
@@ -121,6 +134,7 @@ installed a real one) - turning it off is what makes syncing against a typical L
 plugin.json                          Plugin metadata (id, namespace, class, panels, ...)
 config/pfsense-autoforward.php       Defaults, all overridable via env/settings page
 lang/en/strings.php                  All user-facing copy
+database/migrations/                 pfsense_autoforward_overrides table (per-allocation enable/protocol overrides)
 
 src/
   PfSenseAutoForwardPlugin.php       Filament Plugin contract + HasPluginSettings
@@ -128,12 +142,17 @@ src/
 
   DTO/
     PortForwardRule                  One expected NAT+pass rule pair, derived from one assigned Allocation
-    ReconciliationSummary            Result of one reconciliation pass (created/removed/unchanged/failed counts)
+    MappedPortRow                    One "Currently mapped" table row - cache-serializable projection of a rule
+    ReconciliationSummary            Result of one reconciliation pass (counts + mapped/removed rows)
+
+  Models/PortForwardOverride         Real Eloquent model backing the overrides table
 
   Services/
-    AllocationRepository             Reads Pelican's Allocation table, scopes by required egg tag, maps to DTOs
-    PfSenseApiClient                 Thin pfSense-pkg-RESTAPI v2 client (list/create/delete/apply)
-    PortForwardReconciler            Diffs expected vs. actual, creates/removes, applies once per batch
+    AllocationRepository             Reads Pelican's Allocation table, scopes/resolves overrides, maps to DTOs
+    ServerStatusResolver             Wraps Server::retrieveStatus() - fails open if Wings can't be reached
+    PortForwardOverrideService       Write side of the manual overrides (AllocationRepository is the read side)
+    PfSenseApiClient                 Thin pfSense-pkg-RESTAPI v2 client (list/create/update/delete/apply)
+    PortForwardReconciler            Diffs expected vs. actual, creates/syncs/removes, applies once per batch
 
   Support/ReconciliationStatus       Cache-backed last-run status, read by the admin page
 
@@ -142,7 +161,7 @@ src/
 
   Exceptions/PfSenseApiException     Thrown on any failed pfSense API request
 
-  Filament/Admin/Pages/PfSenseForwardingPage.php  Status page + "Sync Now" action
+  Filament/Admin/Pages/PfSenseForwardingPage.php  Status page + "Currently mapped" table + "Sync Now" action
 ```
 
 ### Why reconciliation instead of listening for allocation events?
@@ -175,15 +194,18 @@ composer install
 composer test
 ```
 
-Tests are plain PHPUnit + [Orchestra Testbench](https://packagist.org/packages/orchestra/testbench). Since this
-plugin has no access to a real Pelican Panel/pfSense instance in isolation, `tests/Stubs/App` provides minimal
-stand-ins for `App\Models\{Allocation,Server,Egg}` and `App\Contracts\Plugins\HasPluginSettings` (mirroring the real
-interface exactly, so a drift like the one that broke the Valheim Mod Manager plugin fails loudly at class-declaration
-time) so the actual plugin services (`AllocationRepository`, `PfSenseApiClient`, `PortForwardReconciler`,
-`PfSenseAutoForwardPlugin`) can be exercised end-to-end. These stubs are dev-only (`autoload-dev`) and irrelevant once
-the plugin is installed in a real panel, where the genuine `App\*` classes are used instead. `PfSenseApiClient` is
-tested against real pfSense-pkg-RESTAPI v2 endpoint paths and field names (verified against that project's own
-[source](https://github.com/jaredhendrickson13/pfsense-api)), using `Http::fake()` rather than a live pfSense.
+Tests are plain PHPUnit + [Orchestra Testbench](https://packagist.org/packages/orchestra/testbench), against a real
+sqlite `:memory:` database (for `PortForwardOverride`) and a bare stand-in `allocations` table so its foreign key has
+somewhere to point. Since this plugin has no access to a real Pelican Panel/pfSense instance in isolation,
+`tests/Stubs/App` provides minimal stand-ins for `App\Models\{Allocation,Server,Egg,Node}`,
+`App\Enums\ContainerStatus`, and `App\Contracts\Plugins\HasPluginSettings` (mirroring the real interface exactly, so a
+drift like the one that broke the Valheim Mod Manager plugin fails loudly at class-declaration time) so the actual
+plugin services (`AllocationRepository`, `ServerStatusResolver`, `PortForwardOverrideService`, `PfSenseApiClient`,
+`PortForwardReconciler`, `PfSenseAutoForwardPlugin`) can be exercised end-to-end. These stubs are dev-only
+(`autoload-dev`) and irrelevant once the plugin is installed in a real panel, where the genuine `App\*` classes are
+used instead. `PfSenseApiClient` is tested against real pfSense-pkg-RESTAPI v2 endpoint paths and field names
+(verified against that project's own [source](https://github.com/jaredhendrickson13/pfsense-api)), using
+`Http::fake()` rather than a live pfSense.
 
 What isn't (and can't reasonably be) covered here: actually talking to a live pfSense instance, and real Filament
 Livewire rendering - those require a running Pelican Panel + pfSense to verify against.

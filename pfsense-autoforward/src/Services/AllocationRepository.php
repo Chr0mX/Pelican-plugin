@@ -4,6 +4,7 @@ namespace Chr0mX\PfSenseAutoForward\Services;
 
 use App\Models\Allocation;
 use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
+use Chr0mX\PfSenseAutoForward\Models\PortForwardOverride;
 use Illuminate\Support\Collection;
 
 /**
@@ -16,16 +17,25 @@ use Illuminate\Support\Collection;
  */
 class AllocationRepository
 {
+    private ?ServerStatusResolver $statusResolver;
+
+    public function __construct(?ServerStatusResolver $statusResolver = null)
+    {
+        $this->statusResolver = $statusResolver;
+    }
+
     /**
      * @return Collection<int, PortForwardRule>
      */
     public function expectedRules(): Collection
     {
+        $overrides = PortForwardOverride::query()->get()->keyBy('allocation_id');
+
         return Allocation::query()
             ->whereNotNull('server_id')
             ->with(['server.egg', 'node'])
             ->get()
-            ->map(fn (Allocation $allocation) => $this->mapAllocation($allocation))
+            ->map(fn (Allocation $allocation) => $this->mapAllocation($allocation, $overrides->get($allocation->id)))
             ->filter()
             ->values();
     }
@@ -34,11 +44,13 @@ class AllocationRepository
      * Split out from expectedRules() so the scoping/mapping logic can be
      * unit tested directly against stub models, without needing a database.
      */
-    public function mapAllocation(Allocation $allocation): ?PortForwardRule
+    public function mapAllocation(Allocation $allocation, ?PortForwardOverride $override = null): ?PortForwardRule
     {
         if (! $this->isInScope($allocation)) {
             return null;
         }
+
+        $serverActive = $this->isServerActive($allocation);
 
         return new PortForwardRule(
             allocationId: $allocation->id,
@@ -50,8 +62,39 @@ class AllocationRepository
             // wherever Wings actually listens on this node.
             targetIp: $allocation->ip,
             port: $allocation->port,
-            protocol: (string) config('pfsense-autoforward.default_protocol', 'tcp/udp'),
+            protocol: $override?->protocol ?: (string) config('pfsense-autoforward.default_protocol', 'tcp/udp'),
+            serverActive: $serverActive,
+            enabled: $this->resolveEnabled($serverActive, $override),
         );
+    }
+
+    /**
+     * Automatic behaviour (mirrors the server's own power state) unless a
+     * manual override forces it one way or the other.
+     */
+    private function resolveEnabled(bool $serverActive, ?PortForwardOverride $override): bool
+    {
+        if ($override?->enabled_override !== null) {
+            return (bool) $override->enabled_override;
+        }
+
+        return $serverActive;
+    }
+
+    private function isServerActive(Allocation $allocation): bool
+    {
+        if (! (bool) config('pfsense-autoforward.disable_when_offline', true)) {
+            // Feature turned off entirely - skip the Wings round-trip and
+            // always report active, matching pre-1.1 behaviour.
+            return true;
+        }
+
+        return $this->statusResolver()->isActive($allocation->server);
+    }
+
+    private function statusResolver(): ServerStatusResolver
+    {
+        return $this->statusResolver ??= new ServerStatusResolver();
     }
 
     private function isInScope(Allocation $allocation): bool

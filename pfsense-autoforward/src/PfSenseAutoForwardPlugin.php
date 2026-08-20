@@ -47,6 +47,7 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
             'pfsense_interface' => config('pfsense-autoforward.pfsense_interface'),
             'verify_tls' => config('pfsense-autoforward.verify_tls'),
             'default_protocol' => config('pfsense-autoforward.default_protocol'),
+            'disable_when_offline' => config('pfsense-autoforward.disable_when_offline'),
             'required_egg_tag' => config('pfsense-autoforward.required_egg_tag'),
             'allowed_node_ids' => config('pfsense-autoforward.allowed_node_ids'),
             'reconcile_interval_minutes' => config('pfsense-autoforward.reconcile_interval_minutes'),
@@ -92,6 +93,11 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
                 ])
                 ->required()
                 ->default(fn () => config('pfsense-autoforward.default_protocol')),
+            Toggle::make('disable_when_offline')
+                ->label('Disable rule when server is stopped')
+                ->helperText('When on, a rule is only enabled while its server is actually running - stopped servers get their port forward disabled rather than removed. Force enabled/disabled per-allocation from the pfSense Forwarding page.')
+                ->inline(false)
+                ->default(fn () => config('pfsense-autoforward.disable_when_offline')),
             TextInput::make('required_egg_tag')
                 ->label('Required egg tag')
                 ->helperText('Only servers whose egg carries this tag are forwarded. Leave blank to forward every assigned allocation on the panel.')
@@ -133,6 +139,7 @@ class PfSenseAutoForwardPlugin implements HasPluginSettings, Plugin
             'PFSENSEAF_INTERFACE' => $data['pfsense_interface'],
             'PFSENSEAF_VERIFY_TLS' => $data['verify_tls'] ? 'true' : 'false',
             'PFSENSEAF_DEFAULT_PROTOCOL' => $data['default_protocol'],
+            'PFSENSEAF_DISABLE_WHEN_OFFLINE' => $data['disable_when_offline'] ? 'true' : 'false',
             'PFSENSEAF_REQUIRED_EGG_TAG' => $data['required_egg_tag'],
             'PFSENSEAF_ALLOWED_NODE_IDS' => $data['allowed_node_ids'],
             'PFSENSEAF_RECONCILE_INTERVAL_MINUTES' => $data['reconcile_interval_minutes'],

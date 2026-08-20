@@ -79,6 +79,10 @@ class PfSenseApiClient
             'target' => $rule->targetIp,
             'local_port' => (string) $rule->port,
             'descr' => $rule->descrTag(),
+            // Created disabled if the server isn't currently running (or a
+            // manual override forces it off) - the rule exists and is
+            // visible immediately, it just doesn't pass traffic yet.
+            'disabled' => ! $rule->enabled,
         ]);
     }
 
@@ -96,6 +100,34 @@ class PfSenseApiClient
             'destination' => $rule->targetIp,
             'destination_port' => (string) $rule->port,
             'descr' => $rule->descrTag(),
+            'disabled' => ! $rule->enabled,
+        ]);
+    }
+
+    /**
+     * Updates an existing rule's mutable fields - whether it's disabled
+     * (the server power state/manual override sync) and its protocol (a
+     * per-allocation protocol override). By numeric id, unlike delete: the
+     * plural endpoints only support GET/PUT/DELETE, not PATCH, so there's
+     * no query-filtered update available - this must run before any delete
+     * in the same reconciliation pass, while the id captured from the
+     * initial listing is still valid (see PortForwardReconciler::reconcile()).
+     */
+    public function updatePortForwardRule(int|string $id, bool $disabled, string $protocol): void
+    {
+        $this->request('PATCH', self::NAT_ENDPOINT, [
+            'id' => $id,
+            'disabled' => $disabled,
+            'protocol' => $protocol,
+        ]);
+    }
+
+    public function updatePassRule(int|string $id, bool $disabled, string $protocol): void
+    {
+        $this->request('PATCH', self::RULE_ENDPOINT, [
+            'id' => $id,
+            'disabled' => $disabled,
+            'protocol' => $protocol,
         ]);
     }
 

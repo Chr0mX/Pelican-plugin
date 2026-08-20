@@ -40,6 +40,23 @@ return [
 
     /*
     |--------------------------------------------------------------------
+    | Server power state
+    |--------------------------------------------------------------------
+    |
+    | When on (the default), a rule is only ever enabled while its server
+    | is actually running (checked live against Wings, cached by the panel
+    | for 15s) - stopped servers get their port forward disabled rather
+    | than removed, so it comes back the moment the server starts again
+    | without waiting on a fresh create. Can be overridden per allocation
+    | from the admin page's "Currently mapped" table (force enabled/
+    | disabled regardless of server state). Turn this whole thing off to
+    | go back to pre-1.1 behaviour: every mapped rule always enabled.
+    |
+    */
+    'disable_when_offline' => (bool) env('PFSENSEAF_DISABLE_WHEN_OFFLINE', true),
+
+    /*
+    |--------------------------------------------------------------------
     | Scope
     |--------------------------------------------------------------------
     |
