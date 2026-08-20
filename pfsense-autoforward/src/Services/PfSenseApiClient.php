@@ -5,7 +5,9 @@ namespace Chr0mX\PfSenseAutoForward\Services;
 use Chr0mX\PfSenseAutoForward\DTO\PortForwardRule;
 use Chr0mX\PfSenseAutoForward\Exceptions\PfSenseApiException;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 /**
  * Thin client for pfSense-pkg-RESTAPI v2 (https://pfrest.org). Endpoint
@@ -153,10 +155,19 @@ class PfSenseApiClient
      * DELETE - the operation this client relies on for safe removal - so a
      * single explicit apply() after a batch is used uniformly for both
      * creates and deletes instead.)
+     *
+     * Sends `async: false` so pfSense reloads the ruleset synchronously
+     * (`filter_configure_sync()`) before this call returns, rather than
+     * merely scheduling a deferred reload (`filter_configure()`, the
+     * default for this endpoint) that can sit pending for a while - the
+     * cause of changes appearing to "work eventually, but slowly."
+     * Blocking here is fine: this always runs inside the already-
+     * background ReconcilePortForwardsJob, never in a request a user is
+     * waiting on directly.
      */
     public function apply(): void
     {
-        $this->request('POST', self::APPLY_ENDPOINT);
+        $this->request('POST', self::APPLY_ENDPOINT, ['async' => false]);
     }
 
     /**
@@ -192,12 +203,31 @@ class PfSenseApiClient
 
         if ($response->failed()) {
             throw new PfSenseApiException(
-                "pfSense API request failed: $method $path",
+                "pfSense API request failed: $method $path ({$response->status()} {$this->describeFailure($response)})",
                 $response->status(),
                 $response->body(),
             );
         }
 
         return $response->json() ?? [];
+    }
+
+    /**
+     * pfSense-pkg-RESTAPI's error envelope is
+     * {"code":..., "status":"error", "response_id":"SOME_ERROR_ID", "message":"...", "data": ...} -
+     * pull the parts that actually explain what went wrong (e.g. a
+     * disallowed method in read-only mode, an invalid field value, an
+     * unauthorized API key) instead of just logging a bare status code.
+     * Falls back to a truncated raw body for a non-JSON/unexpected shape.
+     */
+    private function describeFailure(Response $response): string
+    {
+        $decoded = $response->json();
+
+        if (is_array($decoded) && (isset($decoded['response_id']) || isset($decoded['message']))) {
+            return trim(($decoded['response_id'] ?? '') . ': ' . ($decoded['message'] ?? ''), ': ');
+        }
+
+        return Str::limit($response->body(), 200);
     }
 }
